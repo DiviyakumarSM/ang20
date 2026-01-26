@@ -15,7 +15,7 @@ import {
   CdkDrag,
   CdkDropList,
 } from '@angular/cdk/drag-drop';
-import { DATA } from './data';
+import { DATA, IMAGES, TABLES } from './data';
 
 @Component({
   selector: 'app-assembly-v1-driller',
@@ -79,6 +79,67 @@ import { DATA } from './data';
         }
       </svg>
 
+      <!-- Available Assets Column -->
+      <div class="column-container">
+        <div class="column-header">Available Assets</div>
+
+        <!-- Images Section -->
+        <div class="section-header">Images</div>
+        <div
+          cdkDropList
+          class="drop-list"
+          [cdkDropListData]="{ parentId: 'IMAGES', index: -1 }"
+          [cdkDropListEnterPredicate]="canEnterAssets"
+          (cdkDropListDropped)="onDropAssets($event)"
+        >
+          @for (item of availableImages(); track item.extractedImgId) {
+            <div
+              cdkDrag
+              [cdkDragData]="item"
+              [attr.data-id]="item.extractedImgId"
+              [attr.data-type]="'image'"
+              [title]="item.drawingName"
+              (cdkDragStarted)="isDragging.set(true)"
+              (cdkDragEnded)="isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()"
+              class="draggable-item"
+              [class.invalid-drop]="invalidHoverId() === item.extractedImgId"
+            >
+              <div class="item-content">
+                <span class="item-text">🖼️ {{ item.drawingName }}</span>
+              </div>
+            </div>
+          }
+        </div>
+
+        <!-- Tables Section -->
+        <div class="section-header">Tables</div>
+        <div
+          cdkDropList
+          class="drop-list"
+          [cdkDropListData]="{ parentId: 'TABLES', index: -1 }"
+          [cdkDropListEnterPredicate]="canEnterAssets"
+          (cdkDropListDropped)="onDropAssets($event)"
+        >
+          @for (item of availableTables(); track item.id) {
+            <div
+              cdkDrag
+              [cdkDragData]="item"
+              [attr.data-id]="item.id"
+              [attr.data-type]="'table'"
+              [title]="item.tableName"
+              (cdkDragStarted)="isDragging.set(true)"
+              (cdkDragEnded)="isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()"
+              class="draggable-item"
+              [class.invalid-drop]="invalidHoverId() === item.id"
+            >
+              <div class="item-content">
+                <span class="item-text">📊 {{ item.tableName }}</span>
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+
       @for (col of columns(); track $index; let i = $index) {
         <div class="column-container">
           <div class="column-header">Level {{ i + 1 }}</div>
@@ -103,6 +164,7 @@ import { DATA } from './data';
                 [attr.data-type]="
                   item.assemblyName ? 'folder' : item.extractedImgId ? 'image' : 'table'
                 "
+                [title]="item.assemblyName || item.drawingName || item.tableName"
                 (cdkDragStarted)="isDragging.set(true)"
                 (cdkDragEnded)="
                   isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()
@@ -120,14 +182,42 @@ import { DATA } from './data';
               >
                 <div class="item-content">
                   @if (item.assemblyName) {
-                    <span>📂 {{ item.assemblyName }}</span>
+                    <span class="item-text">📂 {{ item.assemblyName }}</span>
                   } @else if (item.extractedImgId) {
-                    <span>🖼️ {{ item.drawingName }}</span>
+                    <span class="item-text">🖼️ {{ item.drawingName }}</span>
                   } @else if (item.tableName) {
-                    <span>📊 {{ item.tableName }}</span>
+                    <div class="table-item-wrapper">
+                      <div class="table-title">
+                        <span>📊 {{ item.tableName }}</span>
+                        @if (hasValidationError(item, i)) {
+                          <span class="error-badge" [title]="getValidationError(item, i)">⚠️</span>
+                        }
+                      </div>
+
+                      @if (item.tableData && item.tableData.length > 0) {
+                        <table class="data-table">
+                          <thead>
+                            <tr>
+                              @for (header of item.tableData[0]; track $index) {
+                                <th [title]="header">{{ header }}</th>
+                              }
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (row of item.tableData.slice(1, 5); track $index) {
+                              <tr class="data-row">
+                                @for (cell of row; track $index) {
+                                  <td [title]="cell">{{ cell }}</td>
+                                }
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      }
+                    </div>
                   }
 
-                  @if (hasValidationError(item, i)) {
+                  @if (!item.tableName && hasValidationError(item, i)) {
                     <span class="error-badge" [title]="getValidationError(item, i)">⚠️</span>
                   }
                 </div>
@@ -173,7 +263,7 @@ import { DATA } from './data';
         z-index: 1;
       }
       .column-header {
-        padding: 12px;
+        padding: 10px 8px;
         text-align: center;
         font-weight: 700;
         background: #fff;
@@ -181,28 +271,42 @@ import { DATA } from './data';
         border-bottom: 2px solid #228be6;
         border-radius: 8px 8px 0 0;
         color: #495057;
-        font-size: 0.85rem;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+      .section-header {
+        padding: 6px 8px;
+        font-weight: 600;
+        font-size: 0.75rem;
+        color: #495057;
+        background: #e7f5ff;
+        border-radius: 4px;
+        margin-top: 8px;
+        margin-bottom: 6px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
       .drop-list {
-        padding: 12px;
-        min-height: 500px;
+        padding: 8px;
+        min-height: 200px;
+        max-height: 400px;
+        overflow-y: auto;
         background: rgba(255, 255, 255, 0.5);
         border: 1px solid #dee2e6;
         border-top: none;
         border-radius: 0 0 8px 8px;
       }
       .draggable-item {
-        padding: 12px;
-        margin-bottom: 10px;
+        padding: 8px;
+        margin-bottom: 8px;
         background: white;
-        border-radius: 8px;
+        border-radius: 6px;
         border: 1px solid #e9ecef;
         cursor: pointer;
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-start;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
         transition: all 0.2s ease;
       }
@@ -221,13 +325,83 @@ import { DATA } from './data';
       }
       .item-content {
         display: flex;
-        align-items: center;
-        gap: 12px;
+        align-items: flex-start;
+        gap: 6px;
         overflow: hidden;
+        width: 100%;
+      }
+      .item-text {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: block;
+        max-width: 100%;
+        font-size: 0.85rem;
       }
       .error-badge {
         font-size: 1rem;
         cursor: help;
+      }
+      .table-item-wrapper {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+      }
+      .table-title {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-weight: 600;
+        font-size: 0.8rem;
+        color: #343a40;
+      }
+      .table-title span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex: 1;
+      }
+      .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.65rem;
+        background: #f8f9fa;
+        border-radius: 4px;
+        overflow: hidden;
+        table-layout: fixed;
+      }
+      .data-table thead tr {
+        background: #e9ecef;
+      }
+      .data-table th {
+        padding: 3px 4px;
+        text-align: left;
+        font-weight: 600;
+        color: #495057;
+        border-bottom: 1px solid #dee2e6;
+        font-size: 0.6rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .data-table td {
+        padding: 2px 4px;
+        border-bottom: 1px solid #e9ecef;
+        color: #6c757d;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 80px;
+      }
+      .data-table tbody tr.data-row {
+        font-size: 0.6rem;
+      }
+      .data-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+      .data-table tbody tr:hover {
+        background: #fff;
       }
       .asset-icon {
         width: 32px;
@@ -314,6 +488,8 @@ export class Drillerv1Component {
   invalidReason: string | null = null;
 
   rawFileData: any = DATA;
+  availableImages = signal<any[]>([...IMAGES]);
+  availableTables = signal<any[]>([...TABLES]);
 
   columns = signal<any[][]>([]);
   selectedIds = signal<string[]>([]);
@@ -336,9 +512,79 @@ export class Drillerv1Component {
       const t = setTimeout(() => this.calculateArrows(), 60);
       onCleanup(() => clearTimeout(t));
     });
+
+    // Add scroll listener to recalculate arrows on scroll
+    effect((onCleanup) => {
+      const handleScroll = () => {
+        this.calculateArrows();
+      };
+
+      // Wait for the wrapper to be available
+      setTimeout(() => {
+        const wrapper = document.querySelector('.driller-wrapper');
+        if (wrapper) {
+          wrapper.addEventListener('scroll', handleScroll);
+          onCleanup(() => {
+            wrapper.removeEventListener('scroll', handleScroll);
+          });
+        }
+      }, 100);
+    });
   }
 
   /* ================= DROP VALIDATION ================= */
+
+  canEnterAssets = (drag: CdkDrag, drop: CdkDropList): boolean => {
+    // Items can always return to the assets column
+    return true;
+  };
+
+  onDropAssets(event: CdkDragDrop<any>) {
+    this.isDragging.set(false);
+    this.invalidHoverId.set(null);
+    this.clearInvalidReason();
+
+    const item = event.item.data;
+    const itemId = item.extractedImgId || item.id;
+    const source = event.previousContainer.data;
+    const target = event.container.data;
+    const isImage = !!item.extractedImgId;
+
+    // If dragging within same assets section (reorder)
+    if (source.parentId === target.parentId && (source.parentId === 'IMAGES' || source.parentId === 'TABLES')) {
+      if (isImage) {
+        moveItemInArray(this.availableImages(), event.previousIndex, event.currentIndex);
+      } else {
+        moveItemInArray(this.availableTables(), event.previousIndex, event.currentIndex);
+      }
+      return;
+    }
+
+    // Remove from the node
+    if (source.parentId && source.parentId !== 'IMAGES' && source.parentId !== 'TABLES') {
+      this.removeFromModel(source.parentId, itemId, item);
+      this.emitChange(source.parentId, 'REMOVE_TO_ASSETS');
+    }
+
+    // Add back to available assets if not already there
+    if (isImage) {
+      const images = this.availableImages();
+      const exists = images.find((img: any) => img.extractedImgId === itemId);
+      if (!exists) {
+        images.splice(event.currentIndex, 0, item);
+        this.availableImages.set([...images]);
+      }
+    } else {
+      const tables = this.availableTables();
+      const exists = tables.find((tbl: any) => tbl.id === itemId);
+      if (!exists) {
+        tables.splice(event.currentIndex, 0, item);
+        this.availableTables.set([...tables]);
+      }
+    }
+
+    this.refreshView();
+  }
 
   canEnter = (drag: CdkDrag, drop: CdkDropList): boolean => {
     const item = drag.data;
@@ -390,17 +636,52 @@ export class Drillerv1Component {
 
       this.emitChange(target.parentId, 'REORDER');
     } else {
-      // Transfer between columns
-      this.removeFromModel(source.parentId, itemId, item);
-      this.addToModel(target.parentId, itemId, item, event.currentIndex);
-      this.emitChange(source.parentId, 'TRANSFER_OUT');
-      this.emitChange(target.parentId, 'TRANSFER_IN');
+      // Check if dragging from assets column
+      if (source.parentId === 'IMAGES' || source.parentId === 'TABLES') {
+        // Remove from available assets
+        if (source.parentId === 'IMAGES') {
+          const images = this.availableImages();
+          const imageIndex = images.findIndex((img: any) => img.extractedImgId === itemId);
+          if (imageIndex !== -1) {
+            images.splice(imageIndex, 1);
+            this.availableImages.set([...images]);
+          }
+        } else {
+          const tables = this.availableTables();
+          const tableIndex = tables.findIndex((tbl: any) => tbl.id === itemId);
+          if (tableIndex !== -1) {
+            tables.splice(tableIndex, 1);
+            this.availableTables.set([...tables]);
+          }
+        }
+
+        // Add to target
+        this.addToModel(target.parentId, itemId, item, event.currentIndex);
+        this.emitChange(target.parentId, 'ADD_FROM_ASSETS');
+      } else {
+        // Transfer between columns (including moving up/down levels)
+        this.removeFromModel(source.parentId, itemId, item);
+        this.addToModel(target.parentId, itemId, item, event.currentIndex);
+
+        // Update parent map for moved item and its children
+        this.updateParentMapForMovedItem(itemId, target.parentId);
+
+        // If the dropped item was in the active selection path, update selection
+        this.updateSelectionAfterMove(itemId, source.index, target.index);
+
+        this.emitChange(source.parentId, 'TRANSFER_OUT');
+        this.emitChange(target.parentId, 'TRANSFER_IN');
+      }
     }
 
     this.refreshView();
 
-    // Update arrows after drop
-    setTimeout(() => this.calculateArrows(), 100);
+    // Force immediate arrow recalculation - use multiple timeouts for reliability
+    requestAnimationFrame(() => {
+      this.calculateArrows();
+      setTimeout(() => this.calculateArrows(), 50);
+      setTimeout(() => this.calculateArrows(), 150);
+    });
   }
 
   /* ================= SORTING LOGIC ================= */
@@ -509,7 +790,9 @@ export class Drillerv1Component {
 
     this.selectedIds().forEach((parentId) => {
       const node = this.rawFileData.nodes[parentId];
-      if (!node) return;
+
+      // Only process if it's a folder node (not an image or table)
+      if (!node || !node.assemblyId) return;
 
       // Validate node
       this.validateNode(node);
@@ -542,8 +825,39 @@ export class Drillerv1Component {
     const id = item.assemblyId || item.extractedImgId || item.id;
     const sel = this.selectedIds().slice(0, colIdx);
     sel[colIdx] = id;
+
+    // If selecting a root node (colIdx === 0), auto-expand all first children
+    if (colIdx === 0 && item.assemblyId) {
+      this.expandFirstChildren(sel, item);
+    }
+
     this.selectedIds.set(sel);
     this.refreshView();
+  }
+
+  private expandFirstChildren(sel: string[], currentItem: any) {
+    let current = currentItem;
+    let level = 0;
+
+    while (current && current.assemblyId) {
+      const node = this.rawFileData.nodes[current.assemblyId];
+      if (!node || !node.itemOrder || node.itemOrder.length === 0) break;
+
+      // Get the first child that is a folder (assembly)
+      const firstChildId = node.itemOrder.find((id: string) => {
+        return this.rawFileData.nodes[id]?.assemblyId;
+      });
+
+      if (!firstChildId) break;
+
+      const firstChild = this.rawFileData.nodes[firstChildId];
+      if (!firstChild) break;
+
+      // Add to selection
+      level++;
+      sel[level] = firstChild.assemblyId;
+      current = firstChild;
+    }
   }
 
   /* ================= MUTATIONS ================= */
@@ -610,10 +924,18 @@ export class Drillerv1Component {
       const next = this.columns()[i + 1];
       if (!pEl || !next) return;
 
+      const wrapElement = pEl.closest('.driller-wrapper') as HTMLElement;
+      if (!wrapElement) return;
+
       const p = pEl.getBoundingClientRect();
-      const wrap = pEl.closest('.driller-wrapper')!.getBoundingClientRect();
-      const sx = p.right - wrap.left;
-      const sy = p.top - wrap.top + p.height / 2;
+      const wrap = wrapElement.getBoundingClientRect();
+
+      // Account for scroll position
+      const scrollLeft = wrapElement.scrollLeft;
+      const scrollTop = wrapElement.scrollTop;
+
+      const sx = p.right - wrap.left + scrollLeft;
+      const sy = p.top - wrap.top + scrollTop + p.height / 2;
 
       next.forEach((c) => {
         const cid = c.assemblyId || c.extractedImgId || c.id;
@@ -625,8 +947,8 @@ export class Drillerv1Component {
         if (itemType === 'table') return;
 
         const r = cEl.getBoundingClientRect();
-        const ex = r.left - wrap.left;
-        const ey = r.top - wrap.top + r.height / 2;
+        const ex = r.left - wrap.left + scrollLeft;
+        const ey = r.top - wrap.top + scrollTop + r.height / 2;
 
         lines.push({
           path: `M ${sx} ${sy} C ${sx + (ex - sx) / 2} ${sy}, ${sx + (ex - sx) / 2} ${ey}, ${ex} ${ey}`,
@@ -637,6 +959,66 @@ export class Drillerv1Component {
     });
 
     this.connections.set(lines);
+  }
+
+  /* ================= SELECTION & PARENT UPDATE ================= */
+
+  private updateParentMapForMovedItem(itemId: string, newParentId: string | null) {
+    // Update the parent map for the moved item
+    this.parentMap.set(itemId, newParentId);
+
+    // If the moved item is a folder, recursively update all descendants
+    const node = this.rawFileData.nodes[itemId];
+    if (node && node.assemblyId) {
+      this.updateDescendantParents(node);
+    }
+  }
+
+  private updateDescendantParents(node: any) {
+    if (!node || !node.assemblyId) return;
+
+    // Update parent map for all direct children
+    if (node.childIds) {
+      node.childIds.forEach((childId: string) => {
+        this.parentMap.set(childId, node.assemblyId);
+        const childNode = this.rawFileData.nodes[childId];
+        if (childNode) {
+          this.updateDescendantParents(childNode);
+        }
+      });
+    }
+
+    // Update parent map for images and tables
+    if (node.images) {
+      node.images.forEach((img: any) => {
+        this.parentMap.set(img.extractedImgId, node.assemblyId);
+      });
+    }
+
+    if (node.tables) {
+      node.tables.forEach((table: any) => {
+        this.parentMap.set(table.id, node.assemblyId);
+      });
+    }
+  }
+
+  private updateSelectionAfterMove(movedItemId: string, sourceColIndex: number, targetColIndex: number) {
+    const currentSelection = this.selectedIds();
+    const movedItemIndex = currentSelection.indexOf(movedItemId);
+
+    // If the moved item is in the active selection path
+    if (movedItemIndex !== -1) {
+      // Truncate selection at the point where the item was
+      const newSelection = currentSelection.slice(0, movedItemIndex);
+
+      // If moving to a higher level (earlier column), adjust selection
+      if (targetColIndex < sourceColIndex) {
+        // Add the moved item to its new position in the selection
+        newSelection[targetColIndex] = movedItemId;
+      }
+
+      this.selectedIds.set(newSelection);
+    }
   }
 
   private emitChange(nodeId: string | null, action: string) {

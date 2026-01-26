@@ -1,194 +1,383 @@
 import {
   Component,
-  ElementRef,
-  EventEmitter,
-  Output,
   signal,
   viewChildren,
+  ElementRef,
   effect,
-  AfterViewInit,
+  Output,
+  EventEmitter,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop';
-import { FormsModule } from '@angular/forms';
+import { CdkDragDrop, DragDropModule, CdkDrag, CdkDropList } from '@angular/cdk/drag-drop';
 import { DATA } from '../test/data';
-
-type NodeType = 'folder' | 'table' | 'image';
 
 @Component({
   selector: 'app-assembly-driller',
   standalone: true,
-  imports: [CommonModule, DragDropModule, FormsModule],
+  imports: [CommonModule, DragDropModule],
   templateUrl: './assembly-driller-component.html',
   styleUrls: ['./assembly-driller-component.scss'],
 })
-export class AssemblyDrillerComponent implements AfterViewInit {
-  @Output() structureChange = new EventEmitter<any>();
+export class AssemblyDrillerComponent {
+  @Output() onStructureChange = new EventEmitter<any>();
 
   itemRefs = viewChildren<ElementRef>('itemRef');
-  wrapperRef!: ElementRef<HTMLDivElement>;
 
-  rawData: any = DATA;
+  isDragging = signal(false);
+  invalidHoverId = signal<string | null>(null);
+  invalidReason: string | null = null;
+
+  rawFileData: any = DATA;
 
   columns = signal<any[][]>([]);
   selectedIds = signal<string[]>([]);
-  connections = signal<any[]>([]);
+  connections = signal<{ path: string; active: boolean; invalid?: boolean }[]>([]);
 
-  hoveredColumn = signal<number | null>(null);
-  activeMenuColumn = signal<number | null>(null);
-  sidePanelOpen = signal(false);
-
-  draggingId = signal<string | null>(null);
-  invalidHoverId = signal<string | null>(null);
-
-  newAssembly = {
-    name: '',
-    rootId: '',
-    classCode: '',
-  };
+  parentMap = new Map<string, string | null>();
+  validationErrors = new Map<string, string>();
 
   constructor() {
-    this.buildColumns();
+    this.refreshView();
+    this.buildParentMap();
 
-    effect(() => {
-      queueMicrotask(() => this.calculateConnections());
-    });
-  }
+    if (this.rawFileData.rootIds.length) {
+      this.selectItem(this.rawFileData.nodes[this.rawFileData.rootIds[0]], 0);
+    }
 
-  ngAfterViewInit() {
-    effect(() => {
+    effect((onCleanup) => {
       this.columns();
-      requestAnimationFrame(() => this.calculateConnections());
+      this.selectedIds();
+      const t = setTimeout(() => this.calculateArrows(), 60);
+      onCleanup(() => clearTimeout(t));
     });
   }
 
-  /* ================= COLUMN BUILD ================= */
+  /* ================= DROP VALIDATION ================= */
 
-  buildColumns() {
-    const cols: any[][] = [];
+  canEnter = (drag: CdkDrag, drop: CdkDropList): boolean => {
+    const item = drag.data;
+    const target = drop.data;
+    const itemId = item.assemblyId || item.extractedImgId || item.id;
 
-    const rootItems = this.rawData.rootIds.flatMap((id: string) =>
-      this.expandNode(this.rawData.nodes[id]),
+    if (!target?.parentId) {
+      if (!item.assemblyId) {
+        this.setInvalidReason(itemId, 'Only folders allowed at root');
+        return false;
+      }
+      return true;
+    }
+
+    if (item.assemblyId && this.isDescendantFast(itemId, target.parentId)) {
+      this.setInvalidReason(itemId, 'Cannot drop into its own descendant');
+      return false;
+    }
+
+    this.clearInvalidReason();
+    return true;
+  };
+
+  onDrop(event: CdkDragDrop<any>) {
+    this.isDragging.set(false);
+    this.invalidHoverId.set(null);
+    this.clearInvalidReason();
+
+    const item = event.item.data;
+    const itemId = item.assemblyId || item.extractedImgId || item.id;
+    const source = event.previousContainer.data;
+    const target = event.container.data;
+
+    if (!this.canEnter({ data: item } as CdkDrag, { data: target } as CdkDropList)) return;
+
+    if (event.previousContainer === event.container) {
+      // Reorder within same column
+      const orderArray = target.parentId
+        ? this.rawFileData.nodes[target.parentId].itemOrder
+        : this.rawFileData.rootIds;
+
+      const sortedOrder = this.sortItemsInOrder(orderArray, target.parentId);
+
+      if (target.parentId) {
+        this.rawFileData.nodes[target.parentId].itemOrder = sortedOrder;
+      } else {
+        this.rawFileData.rootIds = sortedOrder;
+      }
+
+      this.emitChange(target.parentId, 'REORDER');
+    } else {
+      // Transfer between columns
+      this.removeFromModel(source.parentId, itemId, item);
+      this.addToModel(target.parentId, itemId, item, event.currentIndex);
+      this.emitChange(source.parentId, 'TRANSFER_OUT');
+      this.emitChange(target.parentId, 'TRANSFER_IN');
+    }
+
+    this.refreshView();
+
+    // Update arrows after drop
+    setTimeout(() => this.calculateArrows(), 100);
+  }
+
+  /* ================= SORTING LOGIC ================= */
+
+  private sortItemsInOrder(itemIds: string[], parentId: string | null): string[] {
+    const items = itemIds.map((id) => {
+      const node = this.rawFileData.nodes[id];
+      if (node) return { id, type: 'folder', item: node };
+
+      if (parentId) {
+        const parent = this.rawFileData.nodes[parentId];
+        const image = parent?.images?.find((i: any) => i.extractedImgId === id);
+        if (image) return { id, type: 'image', item: image };
+
+        const table = parent?.tables?.find((t: any) => t.id === id);
+        if (table) return { id, type: 'table', item: table };
+      }
+
+      return { id, type: 'unknown', item: null };
+    });
+
+    // Sort: folders first, then images, then tables
+    const typeOrder = { folder: 0, image: 1, table: 2, unknown: 3 };
+    items.sort(
+      (a, b) =>
+        typeOrder[a.type as keyof typeof typeOrder] - typeOrder[b.type as keyof typeof typeOrder],
     );
 
-    cols.push(rootItems);
+    return items.map((i) => i.id);
+  }
 
-    this.selectedIds().forEach((id) => {
-      const node = this.rawData.nodes[id];
+  /* ================= VALIDATION ================= */
+
+  private validateNode(node: any): void {
+    if (!node.assemblyId) return;
+    const hasImages = node.images && node.images.length > 0;
+    const allTables = node.tables?.flatMap((p: any) => p.tables) || [];
+    if (allTables.length && !hasImages) {
+      allTables.forEach((table: any) => {
+        this.validationErrors.set(table.id, 'Table exists without any image');
+      });
+    } else {
+      allTables.forEach((table: any) => {
+        this.validationErrors.delete(table.id);
+      });
+    }
+  }
+  hasValidationError(item: any, colIdx: number): boolean {
+    const id = item.id || item.extractedImgId;
+    return id ? this.validationErrors.has(id) : false;
+  }
+  getValidationError(item: any, colIdx: number): string {
+    const id = item.id || item.extractedImgId;
+    return id ? this.validationErrors.get(id) || '' : '';
+  }
+
+  /* ================= PERFORMANCE ================= */
+
+  buildParentMap() {
+    this.parentMap.clear();
+    Object.values(this.rawFileData.nodes).forEach((n: any) => {
+      if (n.childIds) n.childIds.forEach((id: string) => this.parentMap.set(id, n.assemblyId));
+      if (n.images)
+        n.images.forEach((i: any) => this.parentMap.set(i.extractedImgId, n.assemblyId));
+      if (n.tables) n.tables.forEach((t: any) => this.parentMap.set(t.id, n.assemblyId));
+    });
+    this.rawFileData.rootIds.forEach((id: string) => this.parentMap.set(id, null));
+  }
+
+  private isDescendantFast(sourceId: string, targetId: string): boolean {
+    let current: string | null = targetId;
+    while (current) {
+      if (current === sourceId) return true;
+      current = this.parentMap.get(current) ?? null;
+    }
+    return false;
+  }
+
+  /* ================= UI HELPERS ================= */
+
+  setInvalidReason(id: string, reason: string) {
+    this.invalidHoverId.set(id);
+    this.invalidReason = reason;
+  }
+
+  clearInvalidReason() {
+    this.invalidReason = null;
+  }
+
+  /* ================= VIEW / DATA ================= */
+
+  refreshView() {
+    this.buildParentMap();
+    this.validationErrors.clear();
+
+    const cols: any[][] = [];
+
+    // Sort root level items
+    const sortedRootIds = this.sortItemsInOrder(this.rawFileData.rootIds, null);
+    this.rawFileData.rootIds = sortedRootIds;
+    cols.push(sortedRootIds.map((id: string) => this.rawFileData.nodes[id]));
+
+    this.selectedIds().forEach((parentId) => {
+      const node = this.rawFileData.nodes[parentId];
       if (!node) return;
-      cols.push(this.expandNode(node));
+
+      // Validate node
+      this.validateNode(node);
+
+      // Sort items in this node
+      const sortedOrder = this.sortItemsInOrder(node.itemOrder || [], parentId);
+      node.itemOrder = sortedOrder;
+
+      const col = sortedOrder
+        .map(
+          (id: string) =>
+            this.rawFileData.nodes[id] ||
+            node.images.find((i: any) => i.extractedImgId === id) ||
+            node.tables.find((t: any) => t.id === id),
+        )
+        .filter(Boolean);
+
+      if (col.length) cols.push(col);
+    });
+
+    // Validate all nodes
+    Object.values(this.rawFileData.nodes).forEach((node: any) => {
+      this.validateNode(node);
     });
 
     this.columns.set(cols);
   }
 
-  expandNode(node: any): any[] {
-    const folders = node.childIds.map((id: string) => this.rawData.nodes[id]);
+  selectItem(item: any, colIdx: number) {
+    const id = item.assemblyId || item.extractedImgId || item.id;
+    const sel = this.selectedIds().slice(0, colIdx);
+    sel[colIdx] = id;
 
-    const tables = (node.tables || []).map((t: any) => ({
-      ...t,
-      __type: 'table',
-      parentId: node.assemblyId,
-    }));
+    // If selecting a root node (colIdx === 0), auto-expand all first children
+    if (colIdx === 0 && item.assemblyId) {
+      this.expandFirstChildren(sel, item);
+    }
 
-    const images = (node.images || []).map((i: any) => ({
-      ...i,
-      __type: 'image',
-      parentId: node.assemblyId,
-    }));
-
-    return [...folders, ...tables, ...images];
+    this.selectedIds.set(sel);
+    this.refreshView();
   }
 
-  selectItem(item: any, colIndex: number) {
-    if (item.__type) return;
-    const next = this.selectedIds().slice(0, colIndex);
-    next[colIndex] = item.assemblyId;
-    this.selectedIds.set(next);
-    this.buildColumns();
+  private expandFirstChildren(sel: string[], currentItem: any) {
+    let current = currentItem;
+    let level = 0;
+
+    while (current && current.assemblyId) {
+      const node = this.rawFileData.nodes[current.assemblyId];
+      if (!node || !node.itemOrder || node.itemOrder.length === 0) break;
+
+      // Get the first child that is a folder (assembly)
+      const firstChildId = node.itemOrder.find((id: string) => {
+        return this.rawFileData.nodes[id]?.assemblyId;
+      });
+
+      if (!firstChildId) break;
+
+      const firstChild = this.rawFileData.nodes[firstChildId];
+      if (!firstChild) break;
+
+      // Add to selection
+      level++;
+      sel[level] = firstChild.assemblyId;
+      current = firstChild;
+    }
   }
 
-  /* ================= DRAG DROP ================= */
+  /* ================= MUTATIONS ================= */
 
-  onDragStart(item: any) {
-    this.draggingId.set(item.assemblyId);
+  deleteAsset(asset: any, parentId: string) {
+    if (!parentId) return;
+    const node = this.rawFileData.nodes[parentId];
+    const assetId = asset.extractedImgId || asset.id;
+    node.itemOrder = node.itemOrder.filter((id: string) => id !== assetId);
+    node.images = node.images.filter((i: any) => i.extractedImgId !== assetId);
+    node.tables = node.tables
+      .map((p: any) => ({ ...p, tables: p.tables.filter((t: any) => t.id !== assetId) }))
+      .filter((p: any) => p.tables.length > 0);
+    this.emitChange(parentId, 'DELETE');
+    this.refreshView();
   }
 
-  onDragEnd() {
-    this.draggingId.set(null);
-    this.invalidHoverId.set(null);
+  private removeFromModel(parentId: string | null, itemId: string, item: any) {
+    if (parentId) {
+      const node = this.rawFileData.nodes[parentId];
+      node.itemOrder = node.itemOrder.filter((id: string) => id !== itemId);
+      node.childIds = node.childIds.filter((id: string) => id !== itemId);
+      node.images = node.images.filter((i: any) => i.extractedImgId !== itemId);
+      node.tables = node.tables.filter((t: any) => t.id !== itemId);
+    } else {
+      this.rawFileData.rootIds = this.rawFileData.rootIds.filter((id: string) => id !== itemId);
+    }
   }
 
-  canEnter = (drop: any, drag: any) => {
-    const dragged = drag.data;
-    const targetId = drop.data?.parentId;
+  private addToModel(parentId: string | null, itemId: string, item: any, index: number) {
+    if (parentId) {
+      const node = this.rawFileData.nodes[parentId];
 
-    if (!dragged?.assemblyId || !targetId) return true;
-    if (dragged.assemblyId === targetId) return false;
-    if (this.isDescendant(dragged.assemblyId, targetId)) return false;
+      // Add to itemOrder
+      node.itemOrder.splice(index, 0, itemId);
 
-    return true;
-  };
+      // Add to appropriate array based on item type
+      if (item.assemblyId) {
+        node.childIds.push(itemId);
+      } else if (item.extractedImgId) {
+        node.images.push(item);
+      } else if (item.id && item.tableName) {
+        node.tables.push(item);
+      }
 
-  onDrop(event: CdkDragDrop<any>) {
-    const dragged = event.item.data;
-    const targetParentId = event.container.data.parentId;
-
-    if (!dragged?.assemblyId || !targetParentId) return;
-    if (this.isDescendant(dragged.assemblyId, targetParentId)) return;
-
-    this.detachFromParent(dragged.assemblyId);
-    this.rawData.nodes[targetParentId].childIds.push(dragged.assemblyId);
-    this.rawData.nodes[targetParentId].itemOrder.push(dragged.assemblyId);
-
-    this.structureChange.emit(this.rawData);
-    this.buildColumns();
+      // Re-sort after adding
+      node.itemOrder = this.sortItemsInOrder(node.itemOrder, parentId);
+    } else {
+      this.rawFileData.rootIds.splice(index, 0, itemId);
+      this.rawFileData.rootIds = this.sortItemsInOrder(this.rawFileData.rootIds, null);
+    }
   }
 
-  detachFromParent(id: string) {
-    Object.values(this.rawData.nodes).forEach((n: any) => {
-      n.childIds = n.childIds.filter((c: string) => c !== id);
-      n.itemOrder = n.itemOrder.filter((c: string) => c !== id);
-    });
-    this.rawData.rootIds = this.rawData.rootIds.filter((r: string) => r !== id);
-  }
-
-  isDescendant(src: string, target: string): boolean {
-    const node = this.rawData.nodes[src];
-    if (!node?.childIds?.length) return false;
-    if (node.childIds.includes(target)) return true;
-    return node.childIds.some((c: string) => this.isDescendant(c, target));
+  /* ================= UTILITY ================= */
+  private getAllTables(node: any): any[] {
+    return node.tables?.flatMap((p: any) => p.tables) || [];
   }
 
   /* ================= SVG ================= */
 
-  calculateConnections() {
-    const items = this.itemRefs();
-    if (!items.length) return;
-
-    const wrapperRect = items[0].nativeElement.closest('.driller-wrapper')!.getBoundingClientRect();
-
+  calculateArrows() {
     const lines: any[] = [];
+    const els = this.itemRefs();
+    const active = this.selectedIds();
+    const dragging = this.isDragging();
 
-    items.forEach((el) => {
-      const id = el.nativeElement.dataset['id'];
-      const node = this.rawData.nodes[id];
-      if (!node?.childIds?.length) return;
+    active.forEach((pid, i) => {
+      const pEl = els.find((e) => e.nativeElement.dataset.id === pid)?.nativeElement;
+      const next = this.columns()[i + 1];
+      if (!pEl || !next) return;
 
-      node.childIds.forEach((cid: string) => {
-        const targetEl = items.find((i) => i.nativeElement.dataset['id'] === cid);
-        if (!targetEl) return;
+      const p = pEl.getBoundingClientRect();
+      const wrap = pEl.closest('.driller-wrapper')!.getBoundingClientRect();
+      const sx = p.right - wrap.left;
+      const sy = p.top - wrap.top + p.height / 2;
 
-        const from = el.nativeElement.getBoundingClientRect();
-        const to = targetEl.nativeElement.getBoundingClientRect();
+      next.forEach((c) => {
+        const cid = c.assemblyId || c.extractedImgId || c.id;
+        const cEl = els.find((e) => e.nativeElement.dataset.id === cid)?.nativeElement;
+        if (!cEl) return;
 
-        const x1 = from.right - wrapperRect.left;
-        const y1 = from.top + from.height / 2 - wrapperRect.top;
-        const x2 = to.left - wrapperRect.left;
-        const y2 = to.top + to.height / 2 - wrapperRect.top;
+        // Skip drawing arrows to tables
+        const itemType = cEl.getAttribute('data-type');
+        if (itemType === 'table') return;
+
+        const r = cEl.getBoundingClientRect();
+        const ex = r.left - wrap.left;
+        const ey = r.top - wrap.top + r.height / 2;
 
         lines.push({
-          d: `M ${x1} ${y1} C ${x1 + 40} ${y1}, ${x2 - 40} ${y2}, ${x2} ${y2}`,
+          path: `M ${sx} ${sy} C ${sx + (ex - sx) / 2} ${sy}, ${sx + (ex - sx) / 2} ${ey}, ${ex} ${ey}`,
+          active: active[i + 1] === cid,
+          invalid: dragging && this.invalidHoverId() === cid,
         });
       });
     });
@@ -196,55 +385,11 @@ export class AssemblyDrillerComponent implements AfterViewInit {
     this.connections.set(lines);
   }
 
-  /* ================= ADD FLOW ================= */
-
-  openAddMenu(colIndex: number) {
-    this.activeMenuColumn.set(colIndex);
-  }
-
-  closeAddMenu() {
-    this.activeMenuColumn.set(null);
-  }
-
-  openSidePanel(colIndex: number) {
-    this.newAssembly = {
-      name: '',
-      rootId: colIndex === 0 ? 'ROOT' : this.selectedIds()[colIndex - 1],
-      classCode: '',
-    };
-
-    this.sidePanelOpen.set(true);
-    this.activeMenuColumn.set(null);
-  }
-
-  closeSidePanel() {
-    this.sidePanelOpen.set(false);
-  }
-
-  createAssembly() {
-    if (!this.newAssembly.name) return;
-
-    const id = crypto.randomUUID();
-
-    this.rawData.nodes[id] = {
-      assemblyId: id,
-      assemblyName: this.newAssembly.name,
-      childIds: [],
-      itemOrder: [],
-      images: [],
-      tables: [],
-    };
-
-    if (this.newAssembly.rootId === 'ROOT') {
-      this.rawData.rootIds.push(id);
-    } else {
-      const parent = this.rawData.nodes[this.newAssembly.rootId];
-      parent.childIds.push(id);
-      parent.itemOrder.push(id);
-    }
-
-    this.sidePanelOpen.set(false);
-    this.buildColumns();
-    this.structureChange.emit(this.rawData);
+  private emitChange(nodeId: string | null, action: string) {
+    this.onStructureChange.emit({
+      nodeId: nodeId || 'ROOT',
+      action,
+      timestamp: new Date().toISOString(),
+    });
   }
 }
