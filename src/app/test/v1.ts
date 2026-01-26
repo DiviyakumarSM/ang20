@@ -8,6 +8,7 @@ import {
   EventEmitter,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import {
   CdkDragDrop,
   DragDropModule,
@@ -15,12 +16,13 @@ import {
   CdkDrag,
   CdkDropList,
 } from '@angular/cdk/drag-drop';
+import { v4 as uuidv4 } from 'uuid';
 import { DATA, IMAGES, TABLES } from './data';
 
 @Component({
   selector: 'app-assembly-v1-driller',
   standalone: true,
-  imports: [CommonModule, DragDropModule],
+  imports: [CommonModule, DragDropModule, FormsModule],
   template: `
     <div class="driller-wrapper" cdkDropListGroup>
       <svg class="connector-layer">
@@ -140,7 +142,23 @@ import { DATA, IMAGES, TABLES } from './data';
         </div>
       </div>
 
-      @for (col of columns(); track $index; let i = $index) {
+      <!-- Zoom Controls -->
+      <div class="zoom-controls">
+        <button class="zoom-btn" (click)="zoomOut()" [disabled]="zoomLevel() <= minZoom" title="Zoom Out">
+          −
+        </button>
+        <span class="zoom-label">{{ (zoomLevel() * 100).toFixed(0) }}%</span>
+        <button class="zoom-btn" (click)="zoomIn()" [disabled]="zoomLevel() >= maxZoom" title="Zoom In">
+          +
+        </button>
+        <button class="zoom-btn" (click)="resetZoom()" title="Reset Zoom">
+          ⟲
+        </button>
+      </div>
+
+      <!-- Levels Section with Zoom -->
+      <div class="levels-container" [style.transform]="'scale(' + zoomLevel() + ')'">
+        @for (col of columns(); track $index; let i = $index) {
         <div class="column-container">
           <div class="column-header">Level {{ i + 1 }}</div>
 
@@ -182,7 +200,24 @@ import { DATA, IMAGES, TABLES } from './data';
               >
                 <div class="item-content">
                   @if (item.assemblyName) {
+                    <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
                     <span class="item-text">📂 {{ item.assemblyName }}</span>
+                    <div class="action-buttons">
+                      <button
+                        class="edit-btn"
+                        (click)="openEditPanel(item); $event.stopPropagation()"
+                        title="Edit assembly"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        class="delete-btn-assembly"
+                        (click)="openDeleteConfirmation(item, i); $event.stopPropagation()"
+                        title="Delete assembly"
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   } @else if (item.extractedImgId) {
                     <span class="item-text">🖼️ {{ item.drawingName }}</span>
                   } @else if (item.tableName) {
@@ -262,6 +297,75 @@ import { DATA, IMAGES, TABLES } from './data';
                 }
               </div>
             </div>
+          </div>
+        </div>
+      }
+      </div>
+      <!-- End Levels Container -->
+
+      <!-- Right Panel for Add/Edit Assembly -->
+      @if (rightPanelOpen()) {
+        <div class="right-panel-overlay" (click)="closeRightPanel()"></div>
+        <div class="right-panel">
+          <div class="panel-header">
+            <h3>{{ rightPanelMode() === 'add' ? 'Add Assembly' : 'Edit Assembly' }}</h3>
+            <button class="close-btn" (click)="closeRightPanel()">×</button>
+          </div>
+
+          <div class="panel-body">
+            <div class="form-group">
+              <label>Assembly Name</label>
+              <input
+                type="text"
+                [(ngModel)]="assemblyForm.assemblyName"
+                placeholder="Enter assembly name"
+                class="form-input"
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Class Code</label>
+              <input
+                type="text"
+                [(ngModel)]="assemblyForm.classCode"
+                placeholder="Enter class code"
+                class="form-input"
+              />
+            </div>
+          </div>
+
+          <div class="panel-footer">
+            <button class="btn-cancel" (click)="closeRightPanel()">Cancel</button>
+            <button class="btn-submit" (click)="submitAssemblyForm()">
+              {{ rightPanelMode() === 'add' ? 'Add' : 'Update' }}
+            </button>
+          </div>
+        </div>
+      }
+
+      <!-- Delete Confirmation Dialog -->
+      @if (deleteDialogOpen()) {
+        <div class="dialog-overlay" (click)="closeDeleteDialog()"></div>
+        <div class="delete-dialog">
+          <div class="dialog-header">
+            <h3>Delete Assembly</h3>
+          </div>
+
+          <div class="dialog-body">
+            <p>
+              Are you sure you want to delete
+              <strong>{{ deleteTargetAssembly?.assemblyName }}</strong
+              >?
+            </p>
+            <p class="warning-text">
+              This will also delete all child assemblies, images, and tables. This action cannot be
+              undone.
+            </p>
+          </div>
+
+          <div class="dialog-footer">
+            <button class="btn-cancel" (click)="closeDeleteDialog()">Cancel</button>
+            <button class="btn-delete" (click)="confirmDeleteAssembly()">Delete</button>
           </div>
         </div>
       }
@@ -576,6 +680,343 @@ import { DATA, IMAGES, TABLES } from './data';
         background: #e7f5ff;
         color: #228be6;
       }
+
+      /* Drag Handle */
+      .drag-handle {
+        cursor: grab;
+        color: #868e96;
+        font-size: 1rem;
+        margin-right: 4px;
+        user-select: none;
+      }
+
+      .draggable-item:active .drag-handle {
+        cursor: grabbing;
+      }
+
+      /* Action Buttons Container */
+      .action-buttons {
+        display: flex;
+        gap: 4px;
+        margin-left: auto;
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+
+      .draggable-item:hover .action-buttons {
+        opacity: 1;
+      }
+
+      /* Edit Button */
+      .edit-btn {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 0.9rem;
+        padding: 2px 4px;
+      }
+
+      .edit-btn:hover {
+        transform: scale(1.1);
+      }
+
+      /* Delete Button for Assembly */
+      .delete-btn-assembly {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        font-size: 0.9rem;
+        padding: 2px 4px;
+      }
+
+      .delete-btn-assembly:hover {
+        transform: scale(1.1);
+      }
+
+      /* Right Panel Overlay */
+      .right-panel-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+      }
+
+      /* Right Panel */
+      .right-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 400px;
+        height: 100%;
+        background: white;
+        box-shadow: -2px 0 10px rgba(0, 0, 0, 0.1);
+        z-index: 1001;
+        display: flex;
+        flex-direction: column;
+        animation: slideIn 0.3s ease;
+      }
+
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+        }
+        to {
+          transform: translateX(0);
+        }
+      }
+
+      .panel-header {
+        padding: 20px;
+        border-bottom: 1px solid #dee2e6;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .panel-header h3 {
+        margin: 0;
+        font-size: 1.2rem;
+        color: #343a40;
+      }
+
+      .close-btn {
+        background: transparent;
+        border: none;
+        font-size: 1.5rem;
+        cursor: pointer;
+        color: #868e96;
+        padding: 0;
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 4px;
+      }
+
+      .close-btn:hover {
+        background: #f1f3f5;
+      }
+
+      .panel-body {
+        flex: 1;
+        padding: 20px;
+        overflow-y: auto;
+      }
+
+      .form-group {
+        margin-bottom: 20px;
+      }
+
+      .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: #495057;
+        font-size: 0.9rem;
+      }
+
+      .form-input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        transition: border-color 0.2s;
+      }
+
+      .form-input:focus {
+        outline: none;
+        border-color: #228be6;
+      }
+
+      .panel-footer {
+        padding: 20px;
+        border-top: 1px solid #dee2e6;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+      }
+
+      .btn-cancel,
+      .btn-submit {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .btn-cancel {
+        background: #f1f3f5;
+        color: #495057;
+      }
+
+      .btn-cancel:hover {
+        background: #e9ecef;
+      }
+
+      .btn-submit {
+        background: #228be6;
+        color: white;
+      }
+
+      .btn-submit:hover {
+        background: #1c7ed6;
+      }
+
+      /* Delete Confirmation Dialog */
+      .dialog-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 2000;
+      }
+
+      .delete-dialog {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 450px;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        z-index: 2001;
+        animation: dialogFadeIn 0.2s ease;
+      }
+
+      @keyframes dialogFadeIn {
+        from {
+          opacity: 0;
+          transform: translate(-50%, -45%);
+        }
+        to {
+          opacity: 1;
+          transform: translate(-50%, -50%);
+        }
+      }
+
+      .dialog-header {
+        padding: 20px;
+        border-bottom: 1px solid #dee2e6;
+      }
+
+      .dialog-header h3 {
+        margin: 0;
+        font-size: 1.2rem;
+        color: #343a40;
+      }
+
+      .dialog-body {
+        padding: 20px;
+      }
+
+      .dialog-body p {
+        margin: 0 0 12px 0;
+        color: #495057;
+        font-size: 0.95rem;
+        line-height: 1.5;
+      }
+
+      .dialog-body strong {
+        color: #343a40;
+        font-weight: 600;
+      }
+
+      .warning-text {
+        color: #fa5252 !important;
+        font-size: 0.85rem !important;
+        margin-top: 8px;
+      }
+
+      .dialog-footer {
+        padding: 20px;
+        border-top: 1px solid #dee2e6;
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+      }
+
+      .btn-delete {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: #fa5252;
+        color: white;
+      }
+
+      .btn-delete:hover {
+        background: #e03131;
+      }
+
+      /* Zoom Controls */
+      .zoom-controls {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: white;
+        padding: 8px 12px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        z-index: 100;
+      }
+
+      .zoom-btn {
+        width: 32px;
+        height: 32px;
+        border: 1px solid #dee2e6;
+        background: white;
+        color: #495057;
+        font-size: 1.2rem;
+        font-weight: bold;
+        cursor: pointer;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+      }
+
+      .zoom-btn:hover:not(:disabled) {
+        background: #228be6;
+        color: white;
+        border-color: #228be6;
+      }
+
+      .zoom-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .zoom-label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #495057;
+        min-width: 45px;
+        text-align: center;
+      }
+
+      /* Levels Container with Zoom */
+      .levels-container {
+        display: flex;
+        gap: 4rem;
+        transform-origin: left top;
+        transition: transform 0.2s ease;
+      }
     `,
   ],
 })
@@ -598,6 +1039,29 @@ export class Drillerv1Component {
 
   parentMap = new Map<string, string | null>();
   validationErrors = new Map<string, string>();
+
+  // Right panel state
+  rightPanelOpen = signal(false);
+  rightPanelMode = signal<'add' | 'edit'>('add');
+  editingAssemblyId = signal<string | null>(null);
+  pendingParentId = signal<string | null>(null);
+
+  // Form fields
+  assemblyForm = {
+    assemblyName: '',
+    classCode: '',
+  };
+
+  // Delete confirmation dialog state
+  deleteDialogOpen = signal(false);
+  deleteTargetAssembly: any = null;
+  deleteTargetLevel: number = 0;
+
+  // Zoom state
+  zoomLevel = signal(1);
+  minZoom = 0.5;
+  maxZoom = 2;
+  zoomStep = 0.1;
 
   constructor() {
     this.refreshView();
@@ -630,6 +1094,13 @@ export class Drillerv1Component {
           });
         }
       }, 100);
+    });
+
+    // Recalculate arrows when zoom level changes
+    effect((onCleanup) => {
+      this.zoomLevel();
+      const t = setTimeout(() => this.calculateArrows(), 100);
+      onCleanup(() => clearTimeout(t));
     });
   }
 
@@ -1130,13 +1601,70 @@ export class Drillerv1Component {
     });
   }
 
-  /* ================= ADD ASSEMBLY/SUB-ASSEMBLY ================= */
+  /* ================= RIGHT PANEL MANAGEMENT ================= */
 
-  addAssembly(parentId: string | null, levelIndex: number) {
-    const newId = `assembly-${Date.now()}`;
+  openAddPanel(parentId: string | null, levelIndex: number) {
+    this.rightPanelMode.set('add');
+    this.pendingParentId.set(parentId);
+    this.editingAssemblyId.set(null);
+
+    // Reset form
+    this.assemblyForm = {
+      assemblyName: '',
+      classCode: '',
+    };
+
+    this.rightPanelOpen.set(true);
+  }
+
+  openEditPanel(assembly: any) {
+    this.rightPanelMode.set('edit');
+    this.editingAssemblyId.set(assembly.assemblyId);
+    this.pendingParentId.set(null);
+
+    // Populate form with existing data
+    this.assemblyForm = {
+      assemblyName: assembly.assemblyName || '',
+      classCode: assembly.classCode || '',
+    };
+
+    this.rightPanelOpen.set(true);
+  }
+
+  closeRightPanel() {
+    this.rightPanelOpen.set(false);
+    this.assemblyForm = {
+      assemblyName: '',
+      classCode: '',
+    };
+  }
+
+  submitAssemblyForm() {
+    // Validation
+    if (!this.assemblyForm.assemblyName.trim()) {
+      alert('Assembly name is required');
+      return;
+    }
+
+    if (this.rightPanelMode() === 'add') {
+      this.createNewAssembly();
+    } else {
+      this.updateExistingAssembly();
+    }
+
+    this.closeRightPanel();
+  }
+
+  /* ================= ADD/UPDATE ASSEMBLY ================= */
+
+  createNewAssembly() {
+    const newId = uuidv4();
+    const parentId = this.pendingParentId();
+
     const newAssembly = {
       assemblyId: newId,
-      assemblyName: `New Assembly ${Date.now()}`,
+      assemblyName: this.assemblyForm.assemblyName,
+      classCode: this.assemblyForm.classCode,
       childIds: [],
       images: [],
       tables: [],
@@ -1160,14 +1688,138 @@ export class Drillerv1Component {
     this.buildParentMap();
     this.emitChange(parentId, 'ADD_ASSEMBLY');
     this.refreshView();
+    setTimeout(() => this.calculateArrows(), 100);
+  }
+
+  updateExistingAssembly() {
+    const assemblyId = this.editingAssemblyId();
+    if (!assemblyId) return;
+
+    const assembly = this.rawFileData.nodes[assemblyId];
+    if (!assembly) return;
+
+    // Update assembly properties
+    assembly.assemblyName = this.assemblyForm.assemblyName;
+    assembly.classCode = this.assemblyForm.classCode;
+
+    this.emitChange(assemblyId, 'UPDATE_ASSEMBLY');
+    this.refreshView();
+  }
+
+  // Update existing addAssembly method to use right panel
+  addAssembly(parentId: string | null, levelIndex: number) {
+    this.openAddPanel(parentId, levelIndex);
+  }
+
+  addSubAssembly(parentId: string | null, levelIndex: number) {
+    this.openAddPanel(parentId, levelIndex);
+  }
+
+  /* ================= DELETE ASSEMBLY ================= */
+
+  openDeleteConfirmation(assembly: any, levelIndex: number) {
+    this.deleteTargetAssembly = assembly;
+    this.deleteTargetLevel = levelIndex;
+    this.deleteDialogOpen.set(true);
+  }
+
+  closeDeleteDialog() {
+    this.deleteDialogOpen.set(false);
+    this.deleteTargetAssembly = null;
+    this.deleteTargetLevel = 0;
+  }
+
+  confirmDeleteAssembly() {
+    if (!this.deleteTargetAssembly) return;
+
+    const assemblyId = this.deleteTargetAssembly.assemblyId;
+    const levelIndex = this.deleteTargetLevel;
+
+    // Determine parent ID
+    const parentId = levelIndex === 0 ? null : this.selectedIds()[levelIndex - 1];
+
+    // Remove from parent or root
+    if (!parentId) {
+      // Remove from root
+      this.rawFileData.rootIds = this.rawFileData.rootIds.filter((id: string) => id !== assemblyId);
+    } else {
+      // Remove from parent
+      const parentNode = this.rawFileData.nodes[parentId];
+      if (parentNode) {
+        parentNode.childIds = parentNode.childIds.filter((id: string) => id !== assemblyId);
+        parentNode.itemOrder = parentNode.itemOrder.filter((id: string) => id !== assemblyId);
+      }
+    }
+
+    // Recursively delete the assembly and all its descendants
+    this.recursiveDeleteAssembly(assemblyId);
+
+    // Update selection if the deleted assembly was in the selection path
+    const currentSelection = this.selectedIds();
+    const deletedIndex = currentSelection.indexOf(assemblyId);
+    if (deletedIndex !== -1) {
+      // Truncate selection at the deleted item
+      this.selectedIds.set(currentSelection.slice(0, deletedIndex));
+    }
+
+    this.buildParentMap();
+    this.emitChange(parentId, 'DELETE_ASSEMBLY');
+    this.refreshView();
+    this.closeDeleteDialog();
 
     // Recalculate arrows
     setTimeout(() => this.calculateArrows(), 100);
   }
 
-  addSubAssembly(parentId: string | null, levelIndex: number) {
-    // For now, same implementation as addAssembly
-    // Can be customized later if sub-assemblies need different behavior
-    this.addAssembly(parentId, levelIndex);
+  private recursiveDeleteAssembly(assemblyId: string) {
+    const node = this.rawFileData.nodes[assemblyId];
+    if (!node) return;
+
+    // Recursively delete all child assemblies
+    if (node.childIds && node.childIds.length > 0) {
+      node.childIds.forEach((childId: string) => {
+        this.recursiveDeleteAssembly(childId);
+      });
+    }
+
+    // Delete the node itself
+    delete this.rawFileData.nodes[assemblyId];
+
+    // Remove from parent map
+    this.parentMap.delete(assemblyId);
+
+    // Remove validation errors for images and tables
+    if (node.images) {
+      node.images.forEach((img: any) => {
+        this.validationErrors.delete(img.extractedImgId);
+        this.parentMap.delete(img.extractedImgId);
+      });
+    }
+
+    if (node.tables) {
+      node.tables.forEach((table: any) => {
+        this.validationErrors.delete(table.id);
+        this.parentMap.delete(table.id);
+      });
+    }
+  }
+
+  /* ================= ZOOM CONTROLS ================= */
+
+  zoomIn() {
+    const newZoom = Math.min(this.zoomLevel() + this.zoomStep, this.maxZoom);
+    this.zoomLevel.set(Number(newZoom.toFixed(1)));
+    setTimeout(() => this.calculateArrows(), 100);
+  }
+
+  zoomOut() {
+    const newZoom = Math.max(this.zoomLevel() - this.zoomStep, this.minZoom);
+    this.zoomLevel.set(Number(newZoom.toFixed(1)));
+    setTimeout(() => this.calculateArrows(), 100);
+  }
+
+  resetZoom() {
+    this.zoomLevel.set(1);
+    setTimeout(() => this.calculateArrows(), 100);
   }
 }
