@@ -100,6 +100,9 @@ import { DATA } from './data';
                 cdkDrag
                 [cdkDragData]="item"
                 [attr.data-id]="item.assemblyId || item.extractedImgId || item.id"
+                [attr.data-type]="
+                  item.assemblyName ? 'folder' : item.extractedImgId ? 'image' : 'table'
+                "
                 (cdkDragStarted)="isDragging.set(true)"
                 (cdkDragEnded)="
                   isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()
@@ -372,11 +375,11 @@ export class Drillerv1Component {
     if (!this.canEnter({ data: item } as CdkDrag, { data: target } as CdkDropList)) return;
 
     if (event.previousContainer === event.container) {
+      // Reorder within same column
       const orderArray = target.parentId
         ? this.rawFileData.nodes[target.parentId].itemOrder
         : this.rawFileData.rootIds;
 
-      // Sort items to maintain folders first
       const sortedOrder = this.sortItemsInOrder(orderArray, target.parentId);
 
       if (target.parentId) {
@@ -387,6 +390,7 @@ export class Drillerv1Component {
 
       this.emitChange(target.parentId, 'REORDER');
     } else {
+      // Transfer between columns
       this.removeFromModel(source.parentId, itemId, item);
       this.addToModel(target.parentId, itemId, item, event.currentIndex);
       this.emitChange(source.parentId, 'TRANSFER_OUT');
@@ -394,6 +398,9 @@ export class Drillerv1Component {
     }
 
     this.refreshView();
+
+    // Update arrows after drop
+    setTimeout(() => this.calculateArrows(), 100);
   }
 
   /* ================= SORTING LOGIC ================= */
@@ -460,6 +467,9 @@ export class Drillerv1Component {
     this.parentMap.clear();
     Object.values(this.rawFileData.nodes).forEach((n: any) => {
       if (n.childIds) n.childIds.forEach((id: string) => this.parentMap.set(id, n.assemblyId));
+      if (n.images)
+        n.images.forEach((i: any) => this.parentMap.set(i.extractedImgId, n.assemblyId));
+      if (n.tables) n.tables.forEach((t: any) => this.parentMap.set(t.id, n.assemblyId));
     });
     this.rawFileData.rootIds.forEach((id: string) => this.parentMap.set(id, null));
   }
@@ -556,6 +566,8 @@ export class Drillerv1Component {
       const node = this.rawFileData.nodes[parentId];
       node.itemOrder = node.itemOrder.filter((id: string) => id !== itemId);
       node.childIds = node.childIds.filter((id: string) => id !== itemId);
+      node.images = node.images.filter((i: any) => i.extractedImgId !== itemId);
+      node.tables = node.tables.filter((t: any) => t.id !== itemId);
     } else {
       this.rawFileData.rootIds = this.rawFileData.rootIds.filter((id: string) => id !== itemId);
     }
@@ -564,19 +576,23 @@ export class Drillerv1Component {
   private addToModel(parentId: string | null, itemId: string, item: any, index: number) {
     if (parentId) {
       const node = this.rawFileData.nodes[parentId];
+
+      // Add to itemOrder
       node.itemOrder.splice(index, 0, itemId);
+
+      // Add to appropriate array based on item type
       if (item.assemblyId) {
         node.childIds.push(itemId);
+      } else if (item.extractedImgId) {
+        node.images.push(item);
+      } else if (item.id && item.tableName) {
+        node.tables.push(item);
       }
-    } else {
-      this.rawFileData.rootIds.splice(index, 0, itemId);
-    }
 
-    // Re-sort after adding
-    if (parentId) {
-      const node = this.rawFileData.nodes[parentId];
+      // Re-sort after adding
       node.itemOrder = this.sortItemsInOrder(node.itemOrder, parentId);
     } else {
+      this.rawFileData.rootIds.splice(index, 0, itemId);
       this.rawFileData.rootIds = this.sortItemsInOrder(this.rawFileData.rootIds, null);
     }
   }
@@ -603,6 +619,10 @@ export class Drillerv1Component {
         const cid = c.assemblyId || c.extractedImgId || c.id;
         const cEl = els.find((e) => e.nativeElement.dataset.id === cid)?.nativeElement;
         if (!cEl) return;
+
+        // Skip drawing arrows to tables
+        const itemType = cEl.getAttribute('data-type');
+        if (itemType === 'table') return;
 
         const r = cEl.getBoundingClientRect();
         const ex = r.left - wrap.left;
