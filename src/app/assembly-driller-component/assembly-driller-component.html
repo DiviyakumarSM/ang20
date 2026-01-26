@@ -1,0 +1,45 @@
+<div class="driller-wrapper">
+  <svg class="connector-layer">
+    <defs>
+      <marker id="arrow" markerWidth="10" markerHeight="10" refX="10" refY="3" orient="auto">
+        <path d="M0,0 L0,6 L9,3 z" fill="#999" />
+      </marker>
+    </defs>
+
+    @for (c of connections(); track $index) {
+      <path [attr.d]="c.d" marker-end="url(#arrow)" />
+    }
+  </svg>
+
+  <div class="columns" cdkDropListGroup>
+    @for (col of columns(); track $index; let i = $index) {
+      <div class="column">
+        <div class="column-header">Level {{ i + 1 }}</div>
+
+        <div
+          cdkDropList
+          class="drop-list"
+          [cdkDropListData]="{ parentId: selectedIds()[i - 1] }"
+          [cdkDropListEnterPredicate]="canEnter"
+          (cdkDropListDropped)="onDrop($event)"
+        >
+          @for (item of col; track item.assemblyId || item.id) {
+            <div
+              #itemRef
+              class="item"
+              cdkDrag
+              [cdkDragData]="item"
+              [attr.data-id]="item.assemblyId"
+              (click)="selectItem(item, i)"
+            >
+              <span>
+                {{ item.__type === 'table' ? '📄' : item.__type === 'image' ? '🖼️' : '📁' }}
+              </span>
+              {{ item.assemblyName || item.name }}
+            </div>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>
