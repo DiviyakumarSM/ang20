@@ -232,6 +232,36 @@ import { DATA, IMAGES, TABLES } from './data';
                 }
               </div>
             }
+
+            <!-- Add plus icon at bottom of each level -->
+            <div class="add-icon-container">
+              <button class="plus-icon-btn">
+                <span>+</span>
+              </button>
+              <div class="add-menu">
+                @if (i === 0) {
+                  <button
+                    (click)="addAssembly(null, i); $event.stopPropagation()"
+                    class="menu-item"
+                  >
+                    Add Assembly
+                  </button>
+                  <button
+                    (click)="addSubAssembly(null, i); $event.stopPropagation()"
+                    class="menu-item"
+                  >
+                    Add Sub Assembly
+                  </button>
+                } @else {
+                  <button
+                    (click)="addSubAssembly(selectedIds()[i - 1], i); $event.stopPropagation()"
+                    class="menu-item"
+                  >
+                    Add Sub Assembly
+                  </button>
+                }
+              </div>
+            </div>
           </div>
         </div>
       }
@@ -290,12 +320,11 @@ import { DATA, IMAGES, TABLES } from './data';
       .drop-list {
         padding: 8px;
         min-height: 200px;
-        max-height: 400px;
-        overflow-y: auto;
         background: rgba(255, 255, 255, 0.5);
         border: 1px solid #dee2e6;
         border-top: none;
         border-radius: 0 0 8px 8px;
+        position: relative;
       }
       .draggable-item {
         padding: 8px;
@@ -474,6 +503,78 @@ import { DATA, IMAGES, TABLES } from './data';
         border: 1px dashed #999;
         background: #fafafa;
         cursor: pointer;
+      }
+
+      .add-icon-container {
+        position: relative;
+        display: flex;
+        justify-content: center;
+        padding: 8px 0;
+        margin-top: 8px;
+      }
+
+      .plus-icon-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: 2px dashed #228be6;
+        background: white;
+        color: #228be6;
+        font-size: 1.2rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+      }
+
+      .plus-icon-btn:hover {
+        background: #228be6;
+        color: white;
+        border-style: solid;
+        transform: scale(1.1);
+      }
+
+      .add-menu {
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        padding: 4px;
+        margin-bottom: 8px;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.2s ease;
+        z-index: 100;
+        min-width: 150px;
+      }
+
+      .add-icon-container:hover .add-menu {
+        opacity: 1;
+        visibility: visible;
+      }
+
+      .menu-item {
+        display: block;
+        width: 100%;
+        padding: 8px 12px;
+        border: none;
+        background: white;
+        color: #495057;
+        text-align: left;
+        cursor: pointer;
+        font-size: 0.85rem;
+        border-radius: 4px;
+        transition: background 0.15s ease;
+      }
+
+      .menu-item:hover {
+        background: #e7f5ff;
+        color: #228be6;
       }
     `,
   ],
@@ -1027,5 +1128,46 @@ export class Drillerv1Component {
       action,
       timestamp: new Date().toISOString(),
     });
+  }
+
+  /* ================= ADD ASSEMBLY/SUB-ASSEMBLY ================= */
+
+  addAssembly(parentId: string | null, levelIndex: number) {
+    const newId = `assembly-${Date.now()}`;
+    const newAssembly = {
+      assemblyId: newId,
+      assemblyName: `New Assembly ${Date.now()}`,
+      childIds: [],
+      images: [],
+      tables: [],
+      itemOrder: [],
+    };
+
+    // Add to nodes
+    this.rawFileData.nodes[newId] = newAssembly;
+
+    // Add to root or parent
+    if (!parentId) {
+      this.rawFileData.rootIds.push(newId);
+      this.rawFileData.rootIds = this.sortItemsInOrder(this.rawFileData.rootIds, null);
+    } else {
+      const parentNode = this.rawFileData.nodes[parentId];
+      parentNode.childIds.push(newId);
+      parentNode.itemOrder.push(newId);
+      parentNode.itemOrder = this.sortItemsInOrder(parentNode.itemOrder, parentId);
+    }
+
+    this.buildParentMap();
+    this.emitChange(parentId, 'ADD_ASSEMBLY');
+    this.refreshView();
+
+    // Recalculate arrows
+    setTimeout(() => this.calculateArrows(), 100);
+  }
+
+  addSubAssembly(parentId: string | null, levelIndex: number) {
+    // For now, same implementation as addAssembly
+    // Can be customized later if sub-assemblies need different behavior
+    this.addAssembly(parentId, levelIndex);
   }
 }
