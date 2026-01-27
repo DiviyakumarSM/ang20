@@ -81,225 +81,259 @@ import { DATA, IMAGES, TABLES } from './data';
         }
       </svg>
 
-      <!-- Available Assets Column -->
-      <div class="column-container">
-        <div class="column-header">Available Assets</div>
-
-        <!-- Images Section -->
-        <div class="section-header">Images</div>
-        <div
-          cdkDropList
-          class="drop-list"
-          [cdkDropListData]="{ parentId: 'IMAGES', index: -1 }"
-          [cdkDropListEnterPredicate]="canEnterAssets"
-          (cdkDropListDropped)="onDropAssets($event)"
-        >
-          @for (item of availableImages(); track item.extractedImgId) {
-            <div
-              cdkDrag
-              [cdkDragData]="item"
-              [attr.data-id]="item.extractedImgId"
-              [attr.data-type]="'image'"
-              [title]="item.drawingName"
-              (cdkDragStarted)="isDragging.set(true)"
-              (cdkDragEnded)="isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()"
-              class="draggable-item"
-              [class.invalid-drop]="invalidHoverId() === item.extractedImgId"
-            >
-              <div class="item-content">
-                <span class="item-text">🖼️ {{ item.drawingName }}</span>
-              </div>
-            </div>
-          }
+      <!-- Available Assets Column - Vertical 50-50 Layout -->
+      <div class="available-assets-panel">
+        <div class="assets-header">
+          <h3>Available Assets</h3>
         </div>
 
-        <!-- Tables Section -->
-        <div class="section-header">Tables</div>
-        <div
-          cdkDropList
-          class="drop-list"
-          [cdkDropListData]="{ parentId: 'TABLES', index: -1 }"
-          [cdkDropListEnterPredicate]="canEnterAssets"
-          (cdkDropListDropped)="onDropAssets($event)"
-        >
-          @for (item of availableTables(); track item.id) {
-            <div
-              cdkDrag
-              [cdkDragData]="item"
-              [attr.data-id]="item.id"
-              [attr.data-type]="'table'"
-              [title]="item.tableName"
-              (cdkDragStarted)="isDragging.set(true)"
-              (cdkDragEnded)="isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()"
-              class="draggable-item"
-              [class.invalid-drop]="invalidHoverId() === item.id"
-            >
-              <div class="item-content">
-                <span class="item-text">📊 {{ item.tableName }}</span>
-              </div>
+        <div class="assets-content">
+          <!-- Images Section - 50% -->
+          <div class="assets-section">
+            <div class="section-header">
+              <span>🖼️ Images</span>
+              <span class="section-count">({{ availableImages().length }})</span>
             </div>
-          }
+            <div
+              cdkDropList
+              class="assets-list"
+              [cdkDropListData]="{ parentId: 'IMAGES', index: -1 }"
+              [cdkDropListEnterPredicate]="canEnterAssets"
+              (cdkDropListDropped)="onDropAssets($event)"
+            >
+              @for (item of availableImages(); track item.extractedImgId) {
+                <div
+                  cdkDrag
+                  [cdkDragData]="item"
+                  class="asset-item"
+                  [attr.data-id]="item.extractedImgId"
+                  [attr.data-type]="'image'"
+                  [title]="item.drawingName"
+                  (cdkDragStarted)="isDragging.set(true)"
+                  (cdkDragEnded)="isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()"
+                >
+                  <span class="drag-handle">⋮⋮</span>
+                  <label class="checkbox-wrapper" (click)="$event.stopPropagation()">
+                    <input type="checkbox" [(ngModel)]="item.selected" />
+                  </label>
+                  <span class="asset-icon">🖼️</span>
+                  <span class="asset-name">{{ item.drawingName }}</span>
+                </div>
+              }
+              @if (availableImages().length === 0) {
+                <div class="empty-state">No images available</div>
+              }
+            </div>
+          </div>
+
+          <!-- Tables Section - 50% -->
+          <div class="assets-section">
+            <div class="section-header">
+              <span>📊 Tables</span>
+              <span class="section-count">({{ availableTables().length }})</span>
+            </div>
+            <div
+              cdkDropList
+              class="assets-list"
+              [cdkDropListData]="{ parentId: 'TABLES', index: -1 }"
+              [cdkDropListEnterPredicate]="canEnterAssets"
+              (cdkDropListDropped)="onDropAssets($event)"
+            >
+              @for (item of availableTables(); track item.id) {
+                <div
+                  cdkDrag
+                  [cdkDragData]="item"
+                  class="asset-item"
+                  [attr.data-id]="item.id"
+                  [attr.data-type]="'table'"
+                  [title]="item.tableName"
+                  (cdkDragStarted)="isDragging.set(true)"
+                  (cdkDragEnded)="isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()"
+                >
+                  <span class="drag-handle">⋮⋮</span>
+                  <label class="checkbox-wrapper" (click)="$event.stopPropagation()">
+                    <input type="checkbox" [(ngModel)]="item.selected" />
+                  </label>
+                  <span class="asset-icon">📊</span>
+                  <span class="asset-name">{{ item.tableName }}</span>
+                </div>
+              }
+              @if (availableTables().length === 0) {
+                <div class="empty-state">No tables available</div>
+              }
+            </div>
+          </div>
         </div>
       </div>
 
       <!-- Zoom Controls -->
       <div class="zoom-controls">
-        <button class="zoom-btn" (click)="zoomOut()" [disabled]="zoomLevel() <= minZoom" title="Zoom Out">
+        <button
+          class="zoom-btn"
+          (click)="zoomOut()"
+          [disabled]="zoomLevel() <= minZoom"
+          title="Zoom Out"
+        >
           −
         </button>
         <span class="zoom-label">{{ (zoomLevel() * 100).toFixed(0) }}%</span>
-        <button class="zoom-btn" (click)="zoomIn()" [disabled]="zoomLevel() >= maxZoom" title="Zoom In">
+        <button
+          class="zoom-btn"
+          (click)="zoomIn()"
+          [disabled]="zoomLevel() >= maxZoom"
+          title="Zoom In"
+        >
           +
         </button>
-        <button class="zoom-btn" (click)="resetZoom()" title="Reset Zoom">
-          ⟲
-        </button>
+        <button class="zoom-btn" (click)="resetZoom()" title="Reset Zoom">⟲</button>
       </div>
 
       <!-- Levels Section with Zoom -->
       <div class="levels-container" [style.transform]="'scale(' + zoomLevel() + ')'">
         @for (col of columns(); track $index; let i = $index) {
-        <div class="column-container">
-          <div class="column-header">Level {{ i + 1 }}</div>
+          <div class="column-container">
+            <div class="column-header">Level {{ i + 1 }}</div>
 
-          <div
-            cdkDropList
-            class="drop-list"
-            [cdkDropListData]="{ parentId: i === 0 ? null : selectedIds()[i - 1], index: i }"
-            [cdkDropListEnterPredicate]="canEnter"
-            (cdkDropListDropped)="onDrop($event)"
-          >
-            @if (!col.length) {
-              <button class="add-btn">+ Add</button>
-            }
+            <div
+              cdkDropList
+              class="drop-list"
+              [cdkDropListData]="{ parentId: i === 0 ? null : selectedIds()[i - 1], index: i }"
+              [cdkDropListEnterPredicate]="canEnter"
+              (cdkDropListDropped)="onDrop($event)"
+            >
+              @if (!col.length) {
+                <button class="add-btn">+ Add</button>
+              }
 
-            @for (item of col; track item.assemblyId || item.extractedImgId || item.id) {
-              <div
-                #itemRef
-                cdkDrag
-                [cdkDragData]="item"
-                [attr.data-id]="item.assemblyId || item.extractedImgId || item.id"
-                [attr.data-type]="
-                  item.assemblyName ? 'folder' : item.extractedImgId ? 'image' : 'table'
-                "
-                [title]="item.assemblyName || item.drawingName || item.tableName"
-                (cdkDragStarted)="isDragging.set(true)"
-                (cdkDragEnded)="
-                  isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()
-                "
-                class="draggable-item"
-                [class.invalid-drop]="
-                  invalidHoverId() === (item.assemblyId || item.extractedImgId || item.id)
-                "
-                [class.folder]="item.assemblyName"
-                [class.active]="
-                  selectedIds().includes(item.assemblyId || item.extractedImgId || item.id)
-                "
-                [class.error-item]="hasValidationError(item, i)"
-                (click)="selectItem(item, i)"
-              >
-                <div class="item-content">
-                  @if (item.assemblyName) {
-                    <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
-                    <span class="item-text">📂 {{ item.assemblyName }}</span>
-                    <div class="action-buttons">
-                      <button
-                        class="edit-btn"
-                        (click)="openEditPanel(item); $event.stopPropagation()"
-                        title="Edit assembly"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        class="delete-btn-assembly"
-                        (click)="openDeleteConfirmation(item, i); $event.stopPropagation()"
-                        title="Delete assembly"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  } @else if (item.extractedImgId) {
-                    <span class="item-text">🖼️ {{ item.drawingName }}</span>
-                  } @else if (item.tableName) {
-                    <div class="table-item-wrapper">
-                      <div class="table-title">
-                        <span>📊 {{ item.tableName }}</span>
-                        @if (hasValidationError(item, i)) {
-                          <span class="error-badge" [title]="getValidationError(item, i)">⚠️</span>
-                        }
+              @for (item of col; track item.assemblyId || item.extractedImgId || item.id) {
+                <div
+                  #itemRef
+                  cdkDrag
+                  [cdkDragData]="item"
+                  [attr.data-id]="item.assemblyId || item.extractedImgId || item.id"
+                  [attr.data-type]="
+                    item.assemblyName ? 'folder' : item.extractedImgId ? 'image' : 'table'
+                  "
+                  [title]="item.assemblyName || item.drawingName || item.tableName"
+                  (cdkDragStarted)="isDragging.set(true)"
+                  (cdkDragEnded)="
+                    isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()
+                  "
+                  class="draggable-item"
+                  [class.invalid-drop]="
+                    invalidHoverId() === (item.assemblyId || item.extractedImgId || item.id)
+                  "
+                  [class.folder]="item.assemblyName"
+                  [class.active]="
+                    selectedIds().includes(item.assemblyId || item.extractedImgId || item.id)
+                  "
+                  [class.error-item]="hasValidationError(item, i)"
+                  (click)="selectItem(item, i)"
+                >
+                  <div class="item-content">
+                    @if (item.assemblyName) {
+                      <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+                      <span class="item-text">📂 {{ item.assemblyName }}</span>
+                      <div class="action-buttons">
+                        <button
+                          class="edit-btn"
+                          (click)="openEditPanel(item); $event.stopPropagation()"
+                          title="Edit assembly"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          class="delete-btn-assembly"
+                          (click)="openDeleteConfirmation(item, i); $event.stopPropagation()"
+                          title="Delete assembly"
+                        >
+                          🗑️
+                        </button>
                       </div>
+                    } @else if (item.extractedImgId) {
+                      <span class="item-text">🖼️ {{ item.drawingName }}</span>
+                    } @else if (item.tableName) {
+                      <div class="table-item-wrapper">
+                        <div class="table-title">
+                          <span>📊 {{ item.tableName }}</span>
+                          @if (hasValidationError(item, i)) {
+                            <span class="error-badge" [title]="getValidationError(item, i)"
+                              >⚠️</span
+                            >
+                          }
+                        </div>
 
-                      @if (item.tableData && item.tableData.length > 0) {
-                        <table class="data-table">
-                          <thead>
-                            <tr>
-                              @for (header of item.tableData[0]; track $index) {
-                                <th [title]="header">{{ header }}</th>
-                              }
-                            </tr>
-                          </thead>
-                          <tbody>
-                            @for (row of item.tableData.slice(1, 5); track $index) {
-                              <tr class="data-row">
-                                @for (cell of row; track $index) {
-                                  <td [title]="cell">{{ cell }}</td>
+                        @if (item.tableData && item.tableData.length > 0) {
+                          <table class="data-table">
+                            <thead>
+                              <tr>
+                                @for (header of item.tableData[0]; track $index) {
+                                  <th [title]="header">{{ header }}</th>
                                 }
                               </tr>
-                            }
-                          </tbody>
-                        </table>
-                      }
-                    </div>
-                  }
+                            </thead>
+                            <tbody>
+                              @for (row of item.tableData.slice(1, 5); track $index) {
+                                <tr class="data-row">
+                                  @for (cell of row; track $index) {
+                                    <td [title]="cell">{{ cell }}</td>
+                                  }
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        }
+                      </div>
+                    }
 
-                  @if (!item.tableName && hasValidationError(item, i)) {
-                    <span class="error-badge" [title]="getValidationError(item, i)">⚠️</span>
+                    @if (!item.tableName && hasValidationError(item, i)) {
+                      <span class="error-badge" [title]="getValidationError(item, i)">⚠️</span>
+                    }
+                  </div>
+
+                  @if (!item.assemblyName) {
+                    <button
+                      class="delete-btn"
+                      (click)="deleteAsset(item, selectedIds()[i - 1]); $event.stopPropagation()"
+                    >
+                      ×
+                    </button>
                   }
                 </div>
+              }
 
-                @if (!item.assemblyName) {
-                  <button
-                    class="delete-btn"
-                    (click)="deleteAsset(item, selectedIds()[i - 1]); $event.stopPropagation()"
-                  >
-                    ×
-                  </button>
-                }
-              </div>
-            }
-
-            <!-- Add plus icon at bottom of each level -->
-            <div class="add-icon-container">
-              <button class="plus-icon-btn">
-                <span>+</span>
-              </button>
-              <div class="add-menu">
-                @if (i === 0) {
-                  <button
-                    (click)="addAssembly(null, i); $event.stopPropagation()"
-                    class="menu-item"
-                  >
-                    Add Assembly
-                  </button>
-                  <button
-                    (click)="addSubAssembly(null, i); $event.stopPropagation()"
-                    class="menu-item"
-                  >
-                    Add Sub Assembly
-                  </button>
-                } @else {
-                  <button
-                    (click)="addSubAssembly(selectedIds()[i - 1], i); $event.stopPropagation()"
-                    class="menu-item"
-                  >
-                    Add Sub Assembly
-                  </button>
-                }
+              <!-- Add plus icon at bottom of each level -->
+              <div class="add-icon-container">
+                <button class="plus-icon-btn">
+                  <span>+</span>
+                </button>
+                <div class="add-menu">
+                  @if (i === 0) {
+                    <button
+                      (click)="addAssembly(null, i); $event.stopPropagation()"
+                      class="menu-item"
+                    >
+                      Add Assembly
+                    </button>
+                    <button
+                      (click)="addSubAssembly(null, i); $event.stopPropagation()"
+                      class="menu-item"
+                    >
+                      Add Sub Assembly
+                    </button>
+                  } @else {
+                    <button
+                      (click)="addSubAssembly(selectedIds()[i - 1], i); $event.stopPropagation()"
+                      class="menu-item"
+                    >
+                      Add Sub Assembly
+                    </button>
+                  }
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      }
+        }
       </div>
       <!-- End Levels Container -->
 
@@ -375,13 +409,150 @@ import { DATA, IMAGES, TABLES } from './data';
     `
       .driller-wrapper {
         display: flex;
-        gap: 4rem;
-        padding: 40px;
+        gap: 2rem;
+        padding: 20px;
         min-height: 85vh;
         position: relative;
         overflow-x: auto;
         background: #f8f9fa;
         font-family: 'Inter', system-ui, sans-serif;
+      }
+
+      /* Available Assets Panel Styles */
+      .available-assets-panel {
+        flex: 0 0 280px;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        overflow: hidden;
+        z-index: 1;
+        height: calc(85vh - 40px);
+      }
+
+      .assets-header {
+        padding: 12px 16px;
+        background: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+      }
+
+      .assets-header h3 {
+        margin: 0;
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: #343a40;
+      }
+
+      .assets-content {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-height: 0;
+      }
+
+      .assets-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        border-bottom: 1px solid #dee2e6;
+      }
+
+      .assets-section:last-child {
+        border-bottom: none;
+      }
+
+      .assets-section .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        margin: 0;
+        background: #f1f3f5;
+        border-bottom: 1px solid #dee2e6;
+        border-radius: 0;
+      }
+
+      .section-count {
+        font-weight: 400;
+        color: #868e96;
+        font-size: 0.7rem;
+      }
+
+      .assets-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px;
+        min-height: 100px;
+      }
+
+      .asset-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 6px;
+        margin-bottom: 6px;
+        cursor: grab;
+        transition: all 0.2s;
+      }
+
+      .asset-item:hover {
+        border-color: #228be6;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+      }
+
+      .asset-item:active {
+        cursor: grabbing;
+      }
+
+      .asset-item .drag-handle {
+        color: #adb5bd;
+        font-weight: bold;
+        letter-spacing: -2px;
+      }
+
+      .asset-item .checkbox-wrapper {
+        display: flex;
+        align-items: center;
+      }
+
+      .asset-item .checkbox-wrapper input {
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+      }
+
+      .asset-item .asset-icon {
+        font-size: 1rem;
+      }
+
+      .asset-item .asset-name {
+        flex: 1;
+        font-size: 0.8rem;
+        color: #495057;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .empty-state {
+        padding: 20px;
+        text-align: center;
+        color: #868e96;
+        font-size: 0.8rem;
+      }
+
+      .asset-item.cdk-drag-preview {
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.15);
+        opacity: 0.95;
+      }
+
+      .assets-list.cdk-drop-list-dragging .asset-item:not(.cdk-drag-placeholder) {
+        transition: transform 200ms ease;
       }
       .connector-layer {
         position: absolute;
@@ -1123,7 +1294,10 @@ export class Drillerv1Component {
     const isImage = !!item.extractedImgId;
 
     // If dragging within same assets section (reorder)
-    if (source.parentId === target.parentId && (source.parentId === 'IMAGES' || source.parentId === 'TABLES')) {
+    if (
+      source.parentId === target.parentId &&
+      (source.parentId === 'IMAGES' || source.parentId === 'TABLES')
+    ) {
       if (isImage) {
         moveItemInArray(this.availableImages(), event.previousIndex, event.currentIndex);
       } else {
@@ -1210,25 +1384,10 @@ export class Drillerv1Component {
     } else {
       // Check if dragging from assets column
       if (source.parentId === 'IMAGES' || source.parentId === 'TABLES') {
-        // Remove from available assets
-        if (source.parentId === 'IMAGES') {
-          const images = this.availableImages();
-          const imageIndex = images.findIndex((img: any) => img.extractedImgId === itemId);
-          if (imageIndex !== -1) {
-            images.splice(imageIndex, 1);
-            this.availableImages.set([...images]);
-          }
-        } else {
-          const tables = this.availableTables();
-          const tableIndex = tables.findIndex((tbl: any) => tbl.id === itemId);
-          if (tableIndex !== -1) {
-            tables.splice(tableIndex, 1);
-            this.availableTables.set([...tables]);
-          }
-        }
-
-        // Add to target
-        this.addToModel(target.parentId, itemId, item, event.currentIndex);
+        // Copy behavior - keep item in available list, just add to target
+        // Create a copy of the item to add to the assembly
+        const itemCopy = { ...item };
+        this.addToModel(target.parentId, itemId, itemCopy, event.currentIndex);
         this.emitChange(target.parentId, 'ADD_FROM_ASSETS');
       } else {
         // Transfer between columns (including moving up/down levels)
@@ -1382,7 +1541,9 @@ export class Drillerv1Component {
         )
         .filter(Boolean);
 
-      if (col.length) cols.push(col);
+      // Always push the column for selected assemblies, even if empty
+      // This allows users to drag-drop or create items in empty assemblies
+      cols.push(col);
     });
 
     // Validate all nodes
@@ -1574,7 +1735,11 @@ export class Drillerv1Component {
     }
   }
 
-  private updateSelectionAfterMove(movedItemId: string, sourceColIndex: number, targetColIndex: number) {
+  private updateSelectionAfterMove(
+    movedItemId: string,
+    sourceColIndex: number,
+    targetColIndex: number,
+  ) {
     const currentSelection = this.selectedIds();
     const movedItemIndex = currentSelection.indexOf(movedItemId);
 
