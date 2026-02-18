@@ -136,7 +136,10 @@ import { DATA, IMAGES, TABLES } from './data';
 
       <!-- Levels Area Wrapper -->
       <div class="levels-area" #levelsAreaRef>
-        <svg class="levels-connector-layer" [attr.width]="svgWidth()" [attr.height]="svgHeight()">
+        <svg class="levels-connector-layer"
+             [attr.width]="svgWidth()"
+             [attr.height]="svgHeight()"
+        >
           <defs>
             <marker
               id="arrow-grey-levels"
@@ -420,11 +423,18 @@ import { DATA, IMAGES, TABLES } from './data';
   `,
   styles: [
     `
+      :host {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
       .driller-wrapper {
         display: flex;
         gap: 0;
         padding: 20px;
-        min-height: 85vh;
+        height: 100%;
+        box-sizing: border-box;
         position: relative;
         overflow: hidden;
         background: #f8f9fa;
@@ -440,7 +450,8 @@ import { DATA, IMAGES, TABLES } from './data';
         border-radius: 8px;
         overflow: hidden;
         z-index: 10;
-        height: calc(85vh - 40px);
+        height: 100%;
+        max-height: calc(100% - 0px);
         margin-right: 20px;
       }
 
@@ -564,9 +575,10 @@ import { DATA, IMAGES, TABLES } from './data';
       .levels-area {
         position: relative;
         flex: 1;
-        overflow-x: auto;
-        overflow-y: hidden;
+        overflow: auto;
         min-width: 0;
+        min-height: 0;
+        height: 100%;
       }
 
       .levels-connector-layer {
@@ -630,6 +642,9 @@ import { DATA, IMAGES, TABLES } from './data';
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
         transition: all 0.2s ease;
         min-width: 0;
+        max-width: 250px;
+        width: 100%;
+        box-sizing: border-box;
       }
       .draggable-item:hover {
         border-color: #4b71ff;
@@ -1197,7 +1212,8 @@ import { DATA, IMAGES, TABLES } from './data';
         transform-origin: left top;
         transition: transform 0.2s ease;
         min-width: max-content;
-        padding-right: 20px;
+        min-height: max-content;
+        padding: 0 20px 20px 0;
       }
     `,
   ],
@@ -1248,6 +1264,8 @@ export class Drillerv1Component {
   // SVG dimensions for connector layer
   svgWidth = signal(2000);
   svgHeight = signal(1000);
+  svgScrollX = signal(0);
+  svgScrollY = signal(0);
 
   constructor() {
     this.refreshView();
@@ -1723,11 +1741,17 @@ export class Drillerv1Component {
 
     const areaRect = levelsArea.getBoundingClientRect();
 
-    // SVG should cover the full scaled content area
-    const scaledWidth = levelsContainer.scrollWidth * zoom;
-    const scaledHeight = levelsContainer.scrollHeight * zoom;
-    this.svgWidth.set(Math.max(scaledWidth, areaRect.width));
-    this.svgHeight.set(Math.max(scaledHeight, areaRect.height));
+    // Store scroll position for SVG transform
+    const scrollLeft = levelsArea.scrollLeft;
+    const scrollTop = levelsArea.scrollTop;
+    this.svgScrollX.set(scrollLeft);
+    this.svgScrollY.set(scrollTop);
+
+    // SVG should cover the full scaled content area plus scroll offset
+    const scaledWidth = levelsContainer.scrollWidth * zoom + scrollLeft;
+    const scaledHeight = levelsContainer.scrollHeight * zoom + scrollTop;
+    this.svgWidth.set(Math.max(scaledWidth, areaRect.width + scrollLeft));
+    this.svgHeight.set(Math.max(scaledHeight, areaRect.height + scrollTop));
 
     active.forEach((pid, i) => {
       const pEl = els.find((e) => e.nativeElement.dataset.id === pid)?.nativeElement;
@@ -1736,12 +1760,8 @@ export class Drillerv1Component {
 
       const p = pEl.getBoundingClientRect();
 
-      // Calculate position relative to levels-area, accounting for scroll
-      // getBoundingClientRect gives viewport coords, we need content coords
-      const scrollLeft = levelsArea.scrollLeft;
-      const scrollTop = levelsArea.scrollTop;
-
-      // Position relative to the scrollable content area
+      // Calculate position relative to levels-area viewport, then add scroll for content position
+      // The SVG transform will offset back, so arrows stay aligned with scrolled content
       const sx = p.right - areaRect.left + scrollLeft;
       const sy = p.top - areaRect.top + scrollTop + p.height / 2;
 
