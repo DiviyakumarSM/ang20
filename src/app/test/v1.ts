@@ -25,62 +25,6 @@ import { DATA, IMAGES, TABLES } from './data';
   imports: [CommonModule, DragDropModule, FormsModule],
   template: `
     <div class="driller-wrapper" cdkDropListGroup>
-      <svg class="connector-layer">
-        <defs>
-          <marker
-            id="arrow-grey"
-            viewBox="0 0 10 10"
-            refX="8"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto"
-          >
-            <path d="M 3 0 L 7 5 L 3 10" fill="none" stroke-width="2" stroke="#ced4da"></path>
-          </marker>
-          <marker
-            id="arrow-green"
-            viewBox="0 0 10 10"
-            refX="8"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto"
-          >
-            <path d="M 3 0 L 7 5 L 3 10" fill="none" stroke-width="2" stroke="green"></path>
-          </marker>
-          <marker
-            id="arrow-red"
-            viewBox="0 0 10 10"
-            refX="8"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto"
-          >
-            <path d="M 3 0 L 7 5 L 3 10" fill="none" stroke-width="2" stroke="#d32f2f"></path>
-          </marker>
-        </defs>
-
-        @if (!isDragging()) {
-          @for (line of connections(); track $index) {
-            <path
-              [attr.d]="line.path"
-              [attr.stroke]="line.invalid ? '#d32f2f' : line.active ? 'green' : '#ced4da'"
-              stroke-width="2"
-              fill="none"
-              [attr.marker-end]="
-                line.invalid
-                  ? 'url(#arrow-red)'
-                  : line.active
-                    ? 'url(#arrow-green)'
-                    : 'url(#arrow-grey)'
-              "
-            />
-          }
-        }
-      </svg>
-
       <!-- Available Assets Column - Vertical 50-50 Layout -->
       <div class="available-assets-panel">
         <div class="assets-header">
@@ -91,7 +35,7 @@ import { DATA, IMAGES, TABLES } from './data';
           <!-- Images Section - 50% -->
           <div class="assets-section">
             <div class="section-header">
-              <span>🖼️ Images</span>
+              <span>Images</span>
               <span class="section-count">({{ availableImages().length }})</span>
             </div>
             <div
@@ -110,14 +54,15 @@ import { DATA, IMAGES, TABLES } from './data';
                   [attr.data-type]="'image'"
                   [title]="item.drawingName"
                   (cdkDragStarted)="isDragging.set(true)"
-                  (cdkDragEnded)="isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()"
+                  (cdkDragEnded)="
+                    isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()
+                  "
                 >
-                  <span class="drag-handle">⋮⋮</span>
                   <label class="checkbox-wrapper" (click)="$event.stopPropagation()">
                     <input type="checkbox" [(ngModel)]="item.selected" />
                   </label>
-                  <span class="asset-icon">🖼️</span>
                   <span class="asset-name">{{ item.drawingName }}</span>
+                  <span class="drag-handle">⋮⋮</span>
                 </div>
               }
               @if (availableImages().length === 0) {
@@ -129,7 +74,7 @@ import { DATA, IMAGES, TABLES } from './data';
           <!-- Tables Section - 50% -->
           <div class="assets-section">
             <div class="section-header">
-              <span>📊 Tables</span>
+              <span>Tables</span>
               <span class="section-count">({{ availableTables().length }})</span>
             </div>
             <div
@@ -148,14 +93,15 @@ import { DATA, IMAGES, TABLES } from './data';
                   [attr.data-type]="'table'"
                   [title]="item.tableName"
                   (cdkDragStarted)="isDragging.set(true)"
-                  (cdkDragEnded)="isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()"
+                  (cdkDragEnded)="
+                    isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()
+                  "
                 >
-                  <span class="drag-handle">⋮⋮</span>
                   <label class="checkbox-wrapper" (click)="$event.stopPropagation()">
                     <input type="checkbox" [(ngModel)]="item.selected" />
                   </label>
-                  <span class="asset-icon">📊</span>
                   <span class="asset-name">{{ item.tableName }}</span>
+                  <span class="drag-handle">⋮⋮</span>
                 </div>
               }
               @if (availableTables().length === 0) {
@@ -188,154 +134,221 @@ import { DATA, IMAGES, TABLES } from './data';
         <button class="zoom-btn" (click)="resetZoom()" title="Reset Zoom">⟲</button>
       </div>
 
-      <!-- Levels Section with Zoom -->
-      <div class="levels-container" [style.transform]="'scale(' + zoomLevel() + ')'">
-        @for (col of columns(); track $index; let i = $index) {
-          <div class="column-container">
-            <div class="column-header">Level {{ i + 1 }}</div>
-
-            <div
-              cdkDropList
-              class="drop-list"
-              [cdkDropListData]="{ parentId: i === 0 ? null : selectedIds()[i - 1], index: i }"
-              [cdkDropListEnterPredicate]="canEnter"
-              (cdkDropListDropped)="onDrop($event)"
+      <!-- Levels Area Wrapper -->
+      <div class="levels-area" #levelsAreaRef>
+        <svg class="levels-connector-layer" [attr.width]="svgWidth()" [attr.height]="svgHeight()">
+          <defs>
+            <marker
+              id="arrow-grey-levels"
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              [attr.markerWidth]="6 * zoomLevel()"
+              [attr.markerHeight]="6 * zoomLevel()"
+              orient="auto"
             >
-              @if (!col.length) {
-                <button class="add-btn">+ Add</button>
-              }
+              <path d="M 3 0 L 7 5 L 3 10" fill="none" stroke-width="2" stroke="#ced4da"></path>
+            </marker>
+            <marker
+              id="arrow-green-levels"
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              [attr.markerWidth]="6 * zoomLevel()"
+              [attr.markerHeight]="6 * zoomLevel()"
+              orient="auto"
+            >
+              <path d="M 3 0 L 7 5 L 3 10" fill="none" stroke-width="2" stroke="green"></path>
+            </marker>
+            <marker
+              id="arrow-red-levels"
+              viewBox="0 0 10 10"
+              refX="8"
+              refY="5"
+              [attr.markerWidth]="6 * zoomLevel()"
+              [attr.markerHeight]="6 * zoomLevel()"
+              orient="auto"
+            >
+              <path d="M 3 0 L 7 5 L 3 10" fill="none" stroke-width="2" stroke="#d32f2f"></path>
+            </marker>
+          </defs>
 
-              @for (item of col; track item.assemblyId || item.extractedImgId || item.id) {
-                <div
-                  #itemRef
-                  cdkDrag
-                  [cdkDragData]="item"
-                  [attr.data-id]="item.assemblyId || item.extractedImgId || item.id"
-                  [attr.data-type]="
-                    item.assemblyName ? 'folder' : item.extractedImgId ? 'image' : 'table'
-                  "
-                  [title]="item.assemblyName || item.drawingName || item.tableName"
-                  (cdkDragStarted)="isDragging.set(true)"
-                  (cdkDragEnded)="
-                    isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()
-                  "
-                  class="draggable-item"
-                  [class.invalid-drop]="
-                    invalidHoverId() === (item.assemblyId || item.extractedImgId || item.id)
-                  "
-                  [class.folder]="item.assemblyName"
-                  [class.active]="
-                    selectedIds().includes(item.assemblyId || item.extractedImgId || item.id)
-                  "
-                  [class.error-item]="hasValidationError(item, i)"
-                  (click)="selectItem(item, i)"
-                >
-                  <div class="item-content">
-                    @if (item.assemblyName) {
-                      <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
-                      <span class="item-text">📂 {{ item.assemblyName }}</span>
-                      <div class="action-buttons">
-                        <button
-                          class="edit-btn"
-                          (click)="openEditPanel(item); $event.stopPropagation()"
-                          title="Edit assembly"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          class="delete-btn-assembly"
-                          (click)="openDeleteConfirmation(item, i); $event.stopPropagation()"
-                          title="Delete assembly"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    } @else if (item.extractedImgId) {
-                      <span class="item-text">🖼️ {{ item.drawingName }}</span>
-                    } @else if (item.tableName) {
-                      <div class="table-item-wrapper">
-                        <div class="table-title">
-                          <span>📊 {{ item.tableName }}</span>
-                          @if (hasValidationError(item, i)) {
-                            <span class="error-badge" [title]="getValidationError(item, i)"
-                              >⚠️</span
-                            >
-                          }
+          @if (!isDragging()) {
+            @for (line of connections(); track $index) {
+              <path
+                [attr.d]="line.path"
+                [attr.stroke]="line.invalid ? '#d32f2f' : line.active ? 'green' : '#ced4da'"
+                [attr.stroke-width]="2 * zoomLevel()"
+                fill="none"
+                [attr.marker-end]="
+                  line.invalid
+                    ? 'url(#arrow-red-levels)'
+                    : line.active
+                      ? 'url(#arrow-green-levels)'
+                      : 'url(#arrow-grey-levels)'
+                "
+              />
+            }
+          }
+        </svg>
+
+        <!-- Levels Section with Zoom -->
+        <div class="levels-container" [style.transform]="'scale(' + zoomLevel() + ')'">
+          @for (col of columns(); track $index; let i = $index) {
+            <div class="column-container">
+              <div class="column-header">
+                <span class="level-number">{{ i + 1 }}</span>
+              </div>
+
+              <div
+                cdkDropList
+                class="drop-list"
+                [cdkDropListData]="{ parentId: i === 0 ? null : selectedIds()[i - 1], index: i }"
+                [cdkDropListEnterPredicate]="canEnter"
+                (cdkDropListDropped)="onDrop($event)"
+              >
+                @if (!col.length) {
+                  <button class="add-btn">+ Add</button>
+                }
+
+                @for (item of col; track item.assemblyId || item.extractedImgId || item.id) {
+                  <div
+                    #itemRef
+                    cdkDrag
+                    [cdkDragData]="item"
+                    [attr.data-id]="item.assemblyId || item.extractedImgId || item.id"
+                    [attr.data-type]="
+                      item.assemblyName ? 'folder' : item.extractedImgId ? 'image' : 'table'
+                    "
+                    [title]="item.assemblyName || item.drawingName || item.tableName"
+                    (cdkDragStarted)="isDragging.set(true)"
+                    (cdkDragEnded)="
+                      isDragging.set(false); invalidHoverId.set(null); clearInvalidReason()
+                    "
+                    class="draggable-item"
+                    [class.invalid-drop]="
+                      invalidHoverId() === (item.assemblyId || item.extractedImgId || item.id)
+                    "
+                    [class.folder]="item.assemblyName"
+                    [class.active]="
+                      selectedIds().includes(item.assemblyId || item.extractedImgId || item.id)
+                    "
+                    [class.error-item]="hasValidationError(item, i)"
+                    [class.complete-pair]="isInCompleteAssembly(item, i)"
+                    (click)="selectItem(item, i)"
+                  >
+                    <div class="item-content">
+                      @if (item.assemblyName) {
+                        <span class="item-text" [title]="item.assemblyName">{{
+                          item.assemblyName
+                        }}</span>
+                        <div class="action-buttons">
+                          <button
+                            class="edit-btn"
+                            (click)="openEditPanel(item); $event.stopPropagation()"
+                            title="Edit assembly"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            class="delete-btn-assembly"
+                            (click)="openDeleteConfirmation(item, i); $event.stopPropagation()"
+                            title="Delete assembly"
+                          >
+                            🗑️
+                          </button>
                         </div>
+                        <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+                      } @else if (item.extractedImgId) {
+                        <span class="item-text" [title]="item.drawingName"
+                          >🖼️ {{ item.drawingName }}</span
+                        >
+                      } @else if (item.tableName) {
+                        <div class="table-item-wrapper">
+                          <div class="table-title">
+                            <span>📊 {{ item.tableName }}</span>
+                            @if (hasValidationError(item, i)) {
+                              <span class="error-badge" [title]="getValidationError(item, i)"
+                                >⚠️</span
+                              >
+                            }
+                          </div>
 
-                        @if (item.tableData && item.tableData.length > 0) {
-                          <table class="data-table">
-                            <thead>
-                              <tr>
-                                @for (header of item.tableData[0]; track $index) {
-                                  <th [title]="header">{{ header }}</th>
-                                }
-                              </tr>
-                            </thead>
-                            <tbody>
-                              @for (row of item.tableData.slice(1, 5); track $index) {
-                                <tr class="data-row">
-                                  @for (cell of row; track $index) {
-                                    <td [title]="cell">{{ cell }}</td>
+                          @if (item.tableData && item.tableData.length > 0) {
+                            <table class="data-table">
+                              <thead>
+                                <tr>
+                                  @for (header of item.tableData[0]; track $index) {
+                                    <th [title]="header">{{ header }}</th>
                                   }
                                 </tr>
-                              }
-                            </tbody>
-                          </table>
-                        }
-                      </div>
-                    }
+                              </thead>
+                              <tbody>
+                                @for (row of item.tableData.slice(1, 5); track $index) {
+                                  <tr class="data-row">
+                                    @for (cell of row; track $index) {
+                                      <td [title]="cell">{{ cell }}</td>
+                                    }
+                                  </tr>
+                                }
+                              </tbody>
+                            </table>
+                          }
+                        </div>
+                      }
 
-                    @if (!item.tableName && hasValidationError(item, i)) {
-                      <span class="error-badge" [title]="getValidationError(item, i)">⚠️</span>
+                      @if (!item.tableName && hasValidationError(item, i)) {
+                        <span class="error-badge" [title]="getValidationError(item, i)">⚠️</span>
+                      }
+                    </div>
+
+                    @if (!item.assemblyName) {
+                      <button
+                        class="delete-btn"
+                        (click)="deleteAsset(item, selectedIds()[i - 1]); $event.stopPropagation()"
+                      >
+                        ×
+                      </button>
                     }
                   </div>
+                }
 
-                  @if (!item.assemblyName) {
-                    <button
-                      class="delete-btn"
-                      (click)="deleteAsset(item, selectedIds()[i - 1]); $event.stopPropagation()"
-                    >
-                      ×
-                    </button>
-                  }
-                </div>
-              }
-
-              <!-- Add plus icon at bottom of each level -->
-              <div class="add-icon-container">
-                <button class="plus-icon-btn">
-                  <span>+</span>
-                </button>
-                <div class="add-menu">
-                  @if (i === 0) {
-                    <button
-                      (click)="addAssembly(null, i); $event.stopPropagation()"
-                      class="menu-item"
-                    >
-                      Add Assembly
-                    </button>
-                    <button
-                      (click)="addSubAssembly(null, i); $event.stopPropagation()"
-                      class="menu-item"
-                    >
-                      Add Sub Assembly
-                    </button>
-                  } @else {
-                    <button
-                      (click)="addSubAssembly(selectedIds()[i - 1], i); $event.stopPropagation()"
-                      class="menu-item"
-                    >
-                      Add Sub Assembly
-                    </button>
-                  }
+                <!-- Add plus icon at bottom of each level -->
+                <div class="add-icon-container">
+                  <button class="plus-icon-btn">
+                    <span>+</span>
+                  </button>
+                  <div class="add-menu">
+                    @if (i === 0) {
+                      <button
+                        (click)="addAssembly(null, i); $event.stopPropagation()"
+                        class="menu-item"
+                      >
+                        Add Assembly
+                      </button>
+                      <button
+                        (click)="addSubAssembly(null, i); $event.stopPropagation()"
+                        class="menu-item"
+                      >
+                        Add Sub Assembly
+                      </button>
+                    } @else {
+                      <button
+                        (click)="addSubAssembly(selectedIds()[i - 1], i); $event.stopPropagation()"
+                        class="menu-item"
+                      >
+                        Add Sub Assembly
+                      </button>
+                    }
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        }
+          }
+        </div>
+        <!-- End Levels Container -->
       </div>
-      <!-- End Levels Container -->
+      <!-- End Levels Area -->
 
       <!-- Right Panel for Add/Edit Assembly -->
       @if (rightPanelOpen()) {
@@ -409,11 +422,11 @@ import { DATA, IMAGES, TABLES } from './data';
     `
       .driller-wrapper {
         display: flex;
-        gap: 2rem;
+        gap: 0;
         padding: 20px;
         min-height: 85vh;
         position: relative;
-        overflow-x: auto;
+        overflow: hidden;
         background: #f8f9fa;
         font-family: 'Inter', system-ui, sans-serif;
       }
@@ -424,24 +437,23 @@ import { DATA, IMAGES, TABLES } from './data';
         display: flex;
         flex-direction: column;
         background: #fff;
-        border: 1px solid #dee2e6;
         border-radius: 8px;
         overflow: hidden;
-        z-index: 1;
+        z-index: 10;
         height: calc(85vh - 40px);
+        margin-right: 20px;
       }
 
       .assets-header {
         padding: 12px 16px;
-        background: #f8f9fa;
-        border-bottom: 1px solid #dee2e6;
+        background: #fff;
       }
 
       .assets-header h3 {
         margin: 0;
         font-size: 0.9rem;
-        font-weight: 600;
-        color: #343a40;
+        font-weight: 400;
+        color: #868e96;
       }
 
       .assets-content {
@@ -456,7 +468,6 @@ import { DATA, IMAGES, TABLES } from './data';
         display: flex;
         flex-direction: column;
         min-height: 0;
-        border-bottom: 1px solid #dee2e6;
       }
 
       .assets-section:last-child {
@@ -469,9 +480,10 @@ import { DATA, IMAGES, TABLES } from './data';
         justify-content: space-between;
         padding: 8px 12px;
         margin: 0;
-        background: #f1f3f5;
-        border-bottom: 1px solid #dee2e6;
-        border-radius: 0;
+        background: #fff;
+        font-weight: 400;
+        color: #868e96;
+        font-size: 0.8rem;
       }
 
       .section-count {
@@ -493,26 +505,18 @@ import { DATA, IMAGES, TABLES } from './data';
         gap: 8px;
         padding: 8px 10px;
         background: white;
-        border: 1px solid #e9ecef;
         border-radius: 6px;
-        margin-bottom: 6px;
+        margin-bottom: 4px;
         cursor: grab;
         transition: all 0.2s;
       }
 
       .asset-item:hover {
-        border-color: #228be6;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        background: #f8f9fa;
       }
 
       .asset-item:active {
         cursor: grabbing;
-      }
-
-      .asset-item .drag-handle {
-        color: #adb5bd;
-        font-weight: bold;
-        letter-spacing: -2px;
       }
 
       .asset-item .checkbox-wrapper {
@@ -526,10 +530,6 @@ import { DATA, IMAGES, TABLES } from './data';
         cursor: pointer;
       }
 
-      .asset-item .asset-icon {
-        font-size: 1rem;
-      }
-
       .asset-item .asset-name {
         flex: 1;
         font-size: 0.8rem;
@@ -537,6 +537,12 @@ import { DATA, IMAGES, TABLES } from './data';
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+
+      .asset-item .drag-handle {
+        color: #adb5bd;
+        font-size: 0.9rem;
+        flex-shrink: 0;
       }
 
       .empty-state {
@@ -554,38 +560,52 @@ import { DATA, IMAGES, TABLES } from './data';
       .assets-list.cdk-drop-list-dragging .asset-item:not(.cdk-drag-placeholder) {
         transition: transform 200ms ease;
       }
-      .connector-layer {
+      /* Levels Area Wrapper */
+      .levels-area {
+        position: relative;
+        flex: 1;
+        overflow-x: auto;
+        overflow-y: hidden;
+        min-width: 0;
+      }
+
+      .levels-connector-layer {
         position: absolute;
         top: 0;
         left: 0;
-        width: 100%;
-        height: 100%;
         pointer-events: none;
         z-index: 0;
+        overflow: visible;
       }
       .column-container {
-        flex: 0 0 280px;
+        flex: 0 0 250px;
         z-index: 1;
       }
       .column-header {
-        padding: 10px 8px;
-        text-align: center;
-        font-weight: 700;
-        background: #fff;
-        border: 1px solid #dee2e6;
-        border-bottom: 2px solid #228be6;
-        border-radius: 8px 8px 0 0;
-        color: #495057;
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        padding: 12px 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      .column-header .level-number {
+        width: 28px;
+        height: 28px;
+        background: #4b71ff;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 0.85rem;
       }
       .section-header {
         padding: 6px 8px;
         font-weight: 600;
         font-size: 0.75rem;
         color: #495057;
-        background: #e7f5ff;
+        background: #e8edff;
         border-radius: 4px;
         margin-top: 8px;
         margin-bottom: 6px;
@@ -595,52 +615,54 @@ import { DATA, IMAGES, TABLES } from './data';
       .drop-list {
         padding: 8px;
         min-height: 200px;
-        background: rgba(255, 255, 255, 0.5);
-        border: 1px solid #dee2e6;
-        border-top: none;
-        border-radius: 0 0 8px 8px;
+        background: transparent;
         position: relative;
       }
       .draggable-item {
-        padding: 8px;
+        padding: 8px 10px;
         margin-bottom: 8px;
         background: white;
         border-radius: 6px;
         border: 1px solid #e9ecef;
         cursor: pointer;
         display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
+        align-items: center;
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
         transition: all 0.2s ease;
+        min-width: 0;
       }
       .draggable-item:hover {
-        border-color: #228be6;
+        border-color: #4b71ff;
         transform: translateY(-1px);
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
       }
       .draggable-item.active {
-        border: 2px solid #228be6;
-        background: #e7f5ff;
+        border: 1px solid #4b71ff;
+        background: #e8edff;
       }
       .draggable-item.error-item {
         border: 2px solid #ffa94d;
         background: #fff4e6;
       }
+      .draggable-item.complete-pair {
+        border: 1px solid #4b71ff;
+      }
       .item-content {
         display: flex;
-        align-items: flex-start;
+        align-items: center;
         gap: 6px;
         overflow: hidden;
-        width: 100%;
+        flex: 1;
+        min-width: 0;
       }
       .item-text {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-        display: block;
-        max-width: 100%;
+        flex: 1;
+        min-width: 0;
         font-size: 0.85rem;
+        color: #343a40;
       }
       .error-badge {
         font-size: 1rem;
@@ -707,21 +729,6 @@ import { DATA, IMAGES, TABLES } from './data';
       .data-table tbody tr:hover {
         background: #fff;
       }
-      .asset-icon {
-        width: 32px;
-        height: 32px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 6px;
-        font-size: 1.1rem;
-      }
-      .img-icon {
-        background: #fff4e6;
-      }
-      .tab-icon {
-        background: #e7f5ff;
-      }
       .asset-info {
         display: flex;
         flex-direction: column;
@@ -753,6 +760,8 @@ import { DATA, IMAGES, TABLES } from './data';
         font-size: 1rem;
         opacity: 0;
         transition: opacity 0.2s;
+        flex-shrink: 0;
+        margin-left: 4px;
       }
       .draggable-item:hover .delete-btn {
         opacity: 1;
@@ -792,9 +801,9 @@ import { DATA, IMAGES, TABLES } from './data';
         width: 32px;
         height: 32px;
         border-radius: 50%;
-        border: 2px dashed #228be6;
+        border: 2px dashed #4b71ff;
         background: white;
-        color: #228be6;
+        color: #4b71ff;
         font-size: 1.2rem;
         cursor: pointer;
         display: flex;
@@ -804,7 +813,7 @@ import { DATA, IMAGES, TABLES } from './data';
       }
 
       .plus-icon-btn:hover {
-        background: #228be6;
+        background: #4b71ff;
         color: white;
         border-style: solid;
         transform: scale(1.1);
@@ -848,17 +857,17 @@ import { DATA, IMAGES, TABLES } from './data';
       }
 
       .menu-item:hover {
-        background: #e7f5ff;
-        color: #228be6;
+        background: #e8edff;
+        color: #4b71ff;
       }
 
       /* Drag Handle */
       .drag-handle {
         cursor: grab;
-        color: #868e96;
+        color: #adb5bd;
         font-size: 1rem;
-        margin-right: 4px;
         user-select: none;
+        flex-shrink: 0;
       }
 
       .draggable-item:active .drag-handle {
@@ -868,8 +877,8 @@ import { DATA, IMAGES, TABLES } from './data';
       /* Action Buttons Container */
       .action-buttons {
         display: flex;
-        gap: 4px;
-        margin-left: auto;
+        gap: 2px;
+        flex-shrink: 0;
         opacity: 0;
         transition: opacity 0.2s;
       }
@@ -1001,7 +1010,7 @@ import { DATA, IMAGES, TABLES } from './data';
 
       .form-input:focus {
         outline: none;
-        border-color: #228be6;
+        border-color: #4b71ff;
       }
 
       .panel-footer {
@@ -1032,12 +1041,12 @@ import { DATA, IMAGES, TABLES } from './data';
       }
 
       .btn-submit {
-        background: #228be6;
+        background: #4b71ff;
         color: white;
       }
 
       .btn-submit:hover {
-        background: #1c7ed6;
+        background: #3a5fd9;
       }
 
       /* Delete Confirmation Dialog */
@@ -1163,9 +1172,9 @@ import { DATA, IMAGES, TABLES } from './data';
       }
 
       .zoom-btn:hover:not(:disabled) {
-        background: #228be6;
+        background: #4b71ff;
         color: white;
-        border-color: #228be6;
+        border-color: #4b71ff;
       }
 
       .zoom-btn:disabled {
@@ -1184,9 +1193,11 @@ import { DATA, IMAGES, TABLES } from './data';
       /* Levels Container with Zoom */
       .levels-container {
         display: flex;
-        gap: 4rem;
+        gap: 3rem;
         transform-origin: left top;
         transition: transform 0.2s ease;
+        min-width: max-content;
+        padding-right: 20px;
       }
     `,
   ],
@@ -1234,6 +1245,10 @@ export class Drillerv1Component {
   maxZoom = 2;
   zoomStep = 0.1;
 
+  // SVG dimensions for connector layer
+  svgWidth = signal(2000);
+  svgHeight = signal(1000);
+
   constructor() {
     this.refreshView();
     this.buildParentMap();
@@ -1249,19 +1264,31 @@ export class Drillerv1Component {
       onCleanup(() => clearTimeout(t));
     });
 
-    // Add scroll listener to recalculate arrows on scroll
+    // Add scroll listener to recalculate arrows on scroll with RAF throttling
     effect((onCleanup) => {
+      let rafId: number | null = null;
+      let isScrolling = false;
+
       const handleScroll = () => {
-        this.calculateArrows();
+        if (!isScrolling) {
+          isScrolling = true;
+          rafId = requestAnimationFrame(() => {
+            this.calculateArrows();
+            isScrolling = false;
+          });
+        }
       };
 
-      // Wait for the wrapper to be available
+      // Wait for the levels-area to be available
       setTimeout(() => {
-        const wrapper = document.querySelector('.driller-wrapper');
-        if (wrapper) {
-          wrapper.addEventListener('scroll', handleScroll);
+        const levelsArea = document.querySelector('.levels-area');
+        if (levelsArea) {
+          levelsArea.addEventListener('scroll', handleScroll, { passive: true });
           onCleanup(() => {
-            wrapper.removeEventListener('scroll', handleScroll);
+            levelsArea.removeEventListener('scroll', handleScroll);
+            if (rafId !== null) {
+              cancelAnimationFrame(rafId);
+            }
           });
         }
       }, 100);
@@ -1497,6 +1524,31 @@ export class Drillerv1Component {
 
   /* ================= UI HELPERS ================= */
 
+  hasImageAndTable(item: any): boolean {
+    if (!item.assemblyId) return false;
+    const node = this.rawFileData.nodes[item.assemblyId];
+    if (!node) return false;
+    const hasImages = node.images && node.images.length > 0;
+    const hasTables = node.tables && node.tables.length > 0;
+    return hasImages && hasTables;
+  }
+
+  isInCompleteAssembly(item: any, colIdx: number): boolean {
+    // Check if this image or table is in an assembly that has both images and tables
+    if (item.assemblyId) return false; // This is a folder, not an image/table
+
+    // Get the parent assembly ID from selection
+    const parentId = this.selectedIds()[colIdx - 1];
+    if (!parentId) return false;
+
+    const parentNode = this.rawFileData.nodes[parentId];
+    if (!parentNode) return false;
+
+    const hasImages = parentNode.images && parentNode.images.length > 0;
+    const hasTables = parentNode.tables && parentNode.tables.length > 0;
+    return hasImages && hasTables;
+  }
+
   setInvalidReason(id: string, reason: string) {
     this.invalidHoverId.set(id);
     this.invalidReason = reason;
@@ -1646,29 +1698,52 @@ export class Drillerv1Component {
 
   /* ================= SVG ================= */
 
+  updateSvgDimensions() {
+    const levelsArea = document.querySelector('.levels-area') as HTMLElement;
+    if (levelsArea) {
+      this.svgWidth.set(Math.max(levelsArea.scrollWidth, levelsArea.clientWidth));
+      this.svgHeight.set(Math.max(levelsArea.scrollHeight, levelsArea.clientHeight));
+    }
+  }
+
   calculateArrows() {
     const lines: any[] = [];
     const els = this.itemRefs();
     const active = this.selectedIds();
     const dragging = this.isDragging();
+    const zoom = this.zoomLevel();
+    const baseRadius = 12; // Base corner radius for the L-bend
+
+    const levelsArea = document.querySelector('.levels-area') as HTMLElement;
+    if (!levelsArea) return;
+
+    // Get the levels-container for accurate position calculations
+    const levelsContainer = levelsArea.querySelector('.levels-container') as HTMLElement;
+    if (!levelsContainer) return;
+
+    const areaRect = levelsArea.getBoundingClientRect();
+
+    // SVG should cover the full scaled content area
+    const scaledWidth = levelsContainer.scrollWidth * zoom;
+    const scaledHeight = levelsContainer.scrollHeight * zoom;
+    this.svgWidth.set(Math.max(scaledWidth, areaRect.width));
+    this.svgHeight.set(Math.max(scaledHeight, areaRect.height));
 
     active.forEach((pid, i) => {
       const pEl = els.find((e) => e.nativeElement.dataset.id === pid)?.nativeElement;
       const next = this.columns()[i + 1];
       if (!pEl || !next) return;
 
-      const wrapElement = pEl.closest('.driller-wrapper') as HTMLElement;
-      if (!wrapElement) return;
-
       const p = pEl.getBoundingClientRect();
-      const wrap = wrapElement.getBoundingClientRect();
 
-      // Account for scroll position
-      const scrollLeft = wrapElement.scrollLeft;
-      const scrollTop = wrapElement.scrollTop;
+      // Calculate position relative to levels-area, accounting for scroll
+      // getBoundingClientRect gives viewport coords, we need content coords
+      const scrollLeft = levelsArea.scrollLeft;
+      const scrollTop = levelsArea.scrollTop;
 
-      const sx = p.right - wrap.left + scrollLeft;
-      const sy = p.top - wrap.top + scrollTop + p.height / 2;
+      // Position relative to the scrollable content area
+      const sx = p.right - areaRect.left + scrollLeft;
+      const sy = p.top - areaRect.top + scrollTop + p.height / 2;
 
       next.forEach((c) => {
         const cid = c.assemblyId || c.extractedImgId || c.id;
@@ -1679,13 +1754,37 @@ export class Drillerv1Component {
         const itemType = cEl.getAttribute('data-type');
         if (itemType === 'table') return;
 
+        // Check if pointing to an image
+        const isImage = itemType === 'image';
+
         const r = cEl.getBoundingClientRect();
-        const ex = r.left - wrap.left + scrollLeft;
-        const ey = r.top - wrap.top + scrollTop + r.height / 2;
+        const ex = r.left - areaRect.left + scrollLeft;
+        const ey = r.top - areaRect.top + scrollTop + r.height / 2;
+
+        // Create curvy L-bend path - use unscaled radius since positions are already scaled
+        const midX = sx + (ex - sx) / 2;
+        const dy = ey - sy;
+        const dir = dy > 0 ? 1 : -1; // Direction: 1 = down, -1 = up
+        const absdy = Math.abs(dy);
+        const r1 = Math.min(baseRadius, absdy / 2, (ex - sx) / 4);
+
+        let path: string;
+        if (absdy < 2) {
+          // Nearly horizontal - just draw a straight line
+          path = `M ${sx} ${sy} L ${ex} ${ey}`;
+        } else {
+          // Curvy L-bend: horizontal -> curve -> vertical -> curve -> horizontal
+          path = `M ${sx} ${sy}
+                  L ${midX - r1} ${sy}
+                  Q ${midX} ${sy} ${midX} ${sy + dir * r1}
+                  L ${midX} ${ey - dir * r1}
+                  Q ${midX} ${ey} ${midX + r1} ${ey}
+                  L ${ex} ${ey}`;
+        }
 
         lines.push({
-          path: `M ${sx} ${sy} C ${sx + (ex - sx) / 2} ${sy}, ${sx + (ex - sx) / 2} ${ey}, ${ex} ${ey}`,
-          active: active[i + 1] === cid,
+          path,
+          active: active[i + 1] === cid || isImage, // Green for selected or images
           invalid: dragging && this.invalidHoverId() === cid,
         });
       });
