@@ -84,12 +84,12 @@ import { DATA, IMAGES, TABLES } from './data';
               [cdkDropListEnterPredicate]="canEnterAssets"
               (cdkDropListDropped)="onDropAssets($event)"
             >
-              @for (item of availableTables(); track item.id) {
+              @for (item of availableTables(); track item.tableId) {
                 <div
                   cdkDrag
                   [cdkDragData]="item"
                   class="asset-item"
-                  [attr.data-id]="item.id"
+                  [attr.data-id]="item.tableId"
                   [attr.data-type]="'table'"
                   [title]="item.tableName"
                   (cdkDragStarted)="isDragging.set(true)"
@@ -214,12 +214,12 @@ import { DATA, IMAGES, TABLES } from './data';
                   <button class="add-btn">+ Add</button>
                 }
 
-                @for (item of col; track item.assemblyId || item.extractedImgId || item.id) {
+                @for (item of col; track item.assemblyId || item.extractedImgId || item.tableId) {
                   <div
                     #itemRef
                     cdkDrag
                     [cdkDragData]="item"
-                    [attr.data-id]="item.assemblyId || item.extractedImgId || item.id"
+                    [attr.data-id]="item.assemblyId || item.extractedImgId || item.tableId"
                     [attr.data-type]="
                       item.assemblyName ? 'folder' : item.extractedImgId ? 'image' : 'table'
                     "
@@ -230,11 +230,11 @@ import { DATA, IMAGES, TABLES } from './data';
                     "
                     class="draggable-item"
                     [class.invalid-drop]="
-                      invalidHoverId() === (item.assemblyId || item.extractedImgId || item.id)
+                      invalidHoverId() === (item.assemblyId || item.extractedImgId || item.tableId)
                     "
                     [class.folder]="item.assemblyName"
                     [class.active]="
-                      selectedIds().includes(item.assemblyId || item.extractedImgId || item.id)
+                      selectedIds().includes(item.assemblyId || item.extractedImgId || item.tableId)
                     "
                     [class.error-item]="hasValidationError(item, i)"
                     [class.complete-pair]="isInCompleteAssembly(item, i)"
@@ -1229,7 +1229,18 @@ export class Drillerv1Component {
 
   rawFileData: any = DATA;
   availableImages = signal<any[]>([...IMAGES]);
-  availableTables = signal<any[]>([...TABLES]);
+  // Transform TABLES to flatten the nested structure
+  availableTables = signal<any[]>(
+    TABLES.flatMap((page) =>
+      page.tables.map((table) => ({
+        ...table,
+        // Keep page info for reference
+        pageNo: page.pageNo,
+        pageId: page.pageId,
+        pageName: page.pageName,
+      })),
+    ),
+  );
 
   columns = signal<any[][]>([]);
   selectedIds = signal<string[]>([]);
@@ -1333,7 +1344,7 @@ export class Drillerv1Component {
     this.clearInvalidReason();
 
     const item = event.item.data;
-    const itemId = item.extractedImgId || item.id;
+    const itemId = item.extractedImgId || item.tableId;
     const source = event.previousContainer.data;
     const target = event.container.data;
     const isImage = !!item.extractedImgId;
@@ -1367,7 +1378,7 @@ export class Drillerv1Component {
       }
     } else {
       const tables = this.availableTables();
-      const exists = tables.find((tbl: any) => tbl.id === itemId);
+      const exists = tables.find((tbl: any) => tbl.tableId === itemId);
       if (!exists) {
         tables.splice(event.currentIndex, 0, item);
         this.availableTables.set([...tables]);
@@ -1380,7 +1391,7 @@ export class Drillerv1Component {
   canEnter = (drag: CdkDrag, drop: CdkDropList): boolean => {
     const item = drag.data;
     const target = drop.data;
-    const itemId = item.assemblyId || item.extractedImgId || item.id;
+    const itemId = item.assemblyId || item.extractedImgId || item.tableId;
 
     if (!target?.parentId) {
       if (!item.assemblyId) {
@@ -1405,7 +1416,7 @@ export class Drillerv1Component {
     this.clearInvalidReason();
 
     const item = event.item.data;
-    const itemId = item.assemblyId || item.extractedImgId || item.id;
+    const itemId = item.assemblyId || item.extractedImgId || item.tableId;
     const source = event.previousContainer.data;
     const target = event.container.data;
 
@@ -1499,22 +1510,22 @@ export class Drillerv1Component {
 
     if (hasTables && !hasImages) {
       node.tables.forEach((table: any) => {
-        this.validationErrors.set(table.id, 'Table exists without any image');
+        this.validationErrors.set(table.tableId, 'Table exists without any image');
       });
     } else {
       node.tables?.forEach((table: any) => {
-        this.validationErrors.delete(table.id);
+        this.validationErrors.delete(table.tableId);
       });
     }
   }
 
   hasValidationError(item: any, colIdx: number): boolean {
-    const id = item.id || item.extractedImgId;
+    const id = item.tableId || item.extractedImgId;
     return id ? this.validationErrors.has(id) : false;
   }
 
   getValidationError(item: any, colIdx: number): string {
-    const id = item.id || item.extractedImgId;
+    const id = item.tableId || item.extractedImgId;
     return id ? this.validationErrors.get(id) || '' : '';
   }
 
@@ -1526,7 +1537,7 @@ export class Drillerv1Component {
       if (n.childIds) n.childIds.forEach((id: string) => this.parentMap.set(id, n.assemblyId));
       if (n.images)
         n.images.forEach((i: any) => this.parentMap.set(i.extractedImgId, n.assemblyId));
-      if (n.tables) n.tables.forEach((t: any) => this.parentMap.set(t.id, n.assemblyId));
+      if (n.tables) n.tables.forEach((t: any) => this.parentMap.set(t.tableId, n.assemblyId));
     });
     this.rawFileData.rootIds.forEach((id: string) => this.parentMap.set(id, null));
   }
@@ -1607,7 +1618,7 @@ export class Drillerv1Component {
           (id: string) =>
             this.rawFileData.nodes[id] ||
             node.images.find((i: any) => i.extractedImgId === id) ||
-            node.tables.find((t: any) => t.id === id),
+            node.tables.find((t: any) => t.tableId === id),
         )
         .filter(Boolean);
 
@@ -1625,7 +1636,7 @@ export class Drillerv1Component {
   }
 
   selectItem(item: any, colIdx: number) {
-    const id = item.assemblyId || item.extractedImgId || item.id;
+    const id = item.assemblyId || item.extractedImgId || item.tableId;
     const sel = this.selectedIds().slice(0, colIdx);
     sel[colIdx] = id;
 
@@ -1668,11 +1679,11 @@ export class Drillerv1Component {
   deleteAsset(asset: any, parentId: string) {
     if (!parentId) return;
     const node = this.rawFileData.nodes[parentId];
-    const assetId = asset.extractedImgId || asset.id;
+    const assetId = asset.extractedImgId || asset.tableId;
 
     node.itemOrder = node.itemOrder.filter((id: string) => id !== assetId);
     node.images = node.images.filter((i: any) => i.extractedImgId !== assetId);
-    node.tables = node.tables.filter((t: any) => t.id !== assetId);
+    node.tables = node.tables.filter((t: any) => t.tableId !== assetId);
 
     this.emitChange(parentId, 'DELETE');
     this.refreshView();
@@ -1684,7 +1695,7 @@ export class Drillerv1Component {
       node.itemOrder = node.itemOrder.filter((id: string) => id !== itemId);
       node.childIds = node.childIds.filter((id: string) => id !== itemId);
       node.images = node.images.filter((i: any) => i.extractedImgId !== itemId);
-      node.tables = node.tables.filter((t: any) => t.id !== itemId);
+      node.tables = node.tables.filter((t: any) => t.tableId !== itemId);
     } else {
       this.rawFileData.rootIds = this.rawFileData.rootIds.filter((id: string) => id !== itemId);
     }
@@ -1702,7 +1713,7 @@ export class Drillerv1Component {
         node.childIds.push(itemId);
       } else if (item.extractedImgId) {
         node.images.push(item);
-      } else if (item.id && item.tableName) {
+      } else if (item.tableId && item.tableName) {
         node.tables.push(item);
       }
 
@@ -1766,7 +1777,7 @@ export class Drillerv1Component {
       const sy = p.top - areaRect.top + scrollTop + p.height / 2;
 
       next.forEach((c) => {
-        const cid = c.assemblyId || c.extractedImgId || c.id;
+        const cid = c.assemblyId || c.extractedImgId || c.tableId;
         const cEl = els.find((e) => e.nativeElement.dataset.id === cid)?.nativeElement;
         if (!cEl) return;
 
@@ -1849,7 +1860,7 @@ export class Drillerv1Component {
 
     if (node.tables) {
       node.tables.forEach((table: any) => {
-        this.parentMap.set(table.id, node.assemblyId);
+        this.parentMap.set(table.tableId, node.assemblyId);
       });
     }
   }
@@ -2082,8 +2093,8 @@ export class Drillerv1Component {
 
     if (node.tables) {
       node.tables.forEach((table: any) => {
-        this.validationErrors.delete(table.id);
-        this.parentMap.delete(table.id);
+        this.validationErrors.delete(table.tableId);
+        this.parentMap.delete(table.tableId);
       });
     }
   }
