@@ -17,7 +17,7 @@ import {
   CdkDropList,
 } from '@angular/cdk/drag-drop';
 import { v4 as uuidv4 } from 'uuid';
-import { DATA, IMAGES, TABLES } from './data';
+import { MOCK_ASSEMBLY_HIERARCHY } from './data';
 
 @Component({
   selector: 'app-assembly-v1-driller',
@@ -136,10 +136,7 @@ import { DATA, IMAGES, TABLES } from './data';
 
       <!-- Levels Area Wrapper -->
       <div class="levels-area" #levelsAreaRef>
-        <svg class="levels-connector-layer"
-             [attr.width]="svgWidth()"
-             [attr.height]="svgHeight()"
-        >
+        <svg class="levels-connector-layer" [attr.width]="svgWidth()" [attr.height]="svgHeight()">
           <defs>
             <marker
               id="arrow-grey-levels"
@@ -1227,11 +1224,11 @@ export class Drillerv1Component {
   invalidHoverId = signal<string | null>(null);
   invalidReason: string | null = null;
 
-  rawFileData: any = DATA;
-  availableImages = signal<any[]>([...IMAGES]);
+  rawFileData: any = MOCK_ASSEMBLY_HIERARCHY.data;
+  availableImages = signal<any[]>([...MOCK_ASSEMBLY_HIERARCHY.data.assemblyHierarchy.imageList]);
   // Transform TABLES to flatten the nested structure
   availableTables = signal<any[]>(
-    TABLES.flatMap((page) =>
+    MOCK_ASSEMBLY_HIERARCHY.data.assemblyHierarchy.tableList.flatMap((page) =>
       page.tables.map((table) => ({
         ...table,
         // Keep page info for reference
@@ -1483,7 +1480,7 @@ export class Drillerv1Component {
         const image = parent?.images?.find((i: any) => i.extractedImgId === id);
         if (image) return { id, type: 'image', item: image };
 
-        const table = parent?.tables?.find((t: any) => t.id === id);
+        const table = this.findTableById(parent?.tables, id);
         if (table) return { id, type: 'table', item: table };
       }
 
@@ -1506,15 +1503,19 @@ export class Drillerv1Component {
     if (!node.assemblyId) return;
 
     const hasImages = node.images && node.images.length > 0;
-    const hasTables = node.tables && node.tables.length > 0;
+    const hasTables = node.tables?.some((page: any) => page.tables?.length > 0);
 
     if (hasTables && !hasImages) {
-      node.tables.forEach((table: any) => {
-        this.validationErrors.set(table.tableId, 'Table exists without any image');
+      node.tables?.forEach((page: any) => {
+        page.tables?.forEach((table: any) => {
+          this.validationErrors.set(table.tableId, 'Table exists without any image');
+        });
       });
     } else {
-      node.tables?.forEach((table: any) => {
-        this.validationErrors.delete(table.tableId);
+      node.tables?.forEach((page: any) => {
+        page.tables?.forEach((table: any) => {
+          this.validationErrors.delete(table.tableId);
+        });
       });
     }
   }
@@ -1537,7 +1538,10 @@ export class Drillerv1Component {
       if (n.childIds) n.childIds.forEach((id: string) => this.parentMap.set(id, n.assemblyId));
       if (n.images)
         n.images.forEach((i: any) => this.parentMap.set(i.extractedImgId, n.assemblyId));
-      if (n.tables) n.tables.forEach((t: any) => this.parentMap.set(t.tableId, n.assemblyId));
+      if (n.tables)
+        n.tables.forEach((page: any) =>
+          page.tables?.forEach((t: any) => this.parentMap.set(t.tableId, n.assemblyId)),
+        );
     });
     this.rawFileData.rootIds.forEach((id: string) => this.parentMap.set(id, null));
   }
@@ -1549,6 +1553,44 @@ export class Drillerv1Component {
       current = this.parentMap.get(current) ?? null;
     }
     return false;
+  }
+
+  /** Find a table by tableId within nested TablePage structure */
+  private findTableById(tablePages: any[], tableId: string): any | undefined {
+    for (const page of tablePages || []) {
+      const found = page.tables?.find((t: any) => t.tableId === tableId);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  /** Remove a table by tableId from nested TablePage structure */
+  private removeTableById(tablePages: any[], tableId: string): void {
+    for (const page of tablePages || []) {
+      if (page.tables) {
+        page.tables = page.tables.filter((t: any) => t.tableId !== tableId);
+      }
+    }
+  }
+
+  /** Add a table to a node's nested TablePage structure */
+  private addTableToNode(node: any, table: any): void {
+    // Use pageId from the table item (added during availableTables flattening)
+    const pageId = table.pageId || 'default-page';
+    let existingPage = node.tables.find((p: any) => p.pageId === pageId);
+
+    if (existingPage) {
+      existingPage.tables.push(table);
+    } else {
+      // Create a new TablePage wrapper
+      node.tables.push({
+        tables: [table],
+        pageNo: table.pageNo || 'page-1',
+        type: 'table',
+        pageId: pageId,
+        pageName: table.pageName || 'Page',
+      });
+    }
   }
 
   /* ================= UI HELPERS ================= */
@@ -1618,7 +1660,7 @@ export class Drillerv1Component {
           (id: string) =>
             this.rawFileData.nodes[id] ||
             node.images.find((i: any) => i.extractedImgId === id) ||
-            node.tables.find((t: any) => t.tableId === id),
+            this.findTableById(node.tables, id),
         )
         .filter(Boolean);
 
@@ -1683,7 +1725,7 @@ export class Drillerv1Component {
 
     node.itemOrder = node.itemOrder.filter((id: string) => id !== assetId);
     node.images = node.images.filter((i: any) => i.extractedImgId !== assetId);
-    node.tables = node.tables.filter((t: any) => t.tableId !== assetId);
+    this.removeTableById(node.tables, assetId);
 
     this.emitChange(parentId, 'DELETE');
     this.refreshView();
@@ -1695,7 +1737,7 @@ export class Drillerv1Component {
       node.itemOrder = node.itemOrder.filter((id: string) => id !== itemId);
       node.childIds = node.childIds.filter((id: string) => id !== itemId);
       node.images = node.images.filter((i: any) => i.extractedImgId !== itemId);
-      node.tables = node.tables.filter((t: any) => t.tableId !== itemId);
+      this.removeTableById(node.tables, itemId);
     } else {
       this.rawFileData.rootIds = this.rawFileData.rootIds.filter((id: string) => id !== itemId);
     }
@@ -1714,7 +1756,7 @@ export class Drillerv1Component {
       } else if (item.extractedImgId) {
         node.images.push(item);
       } else if (item.tableId && item.tableName) {
-        node.tables.push(item);
+        this.addTableToNode(node, item);
       }
 
       // Re-sort after adding
@@ -1859,8 +1901,10 @@ export class Drillerv1Component {
     }
 
     if (node.tables) {
-      node.tables.forEach((table: any) => {
-        this.parentMap.set(table.tableId, node.assemblyId);
+      node.tables.forEach((page: any) => {
+        page.tables?.forEach((table: any) => {
+          this.parentMap.set(table.tableId, node.assemblyId);
+        });
       });
     }
   }
@@ -2092,9 +2136,11 @@ export class Drillerv1Component {
     }
 
     if (node.tables) {
-      node.tables.forEach((table: any) => {
-        this.validationErrors.delete(table.tableId);
-        this.parentMap.delete(table.tableId);
+      node.tables.forEach((page: any) => {
+        page.tables?.forEach((table: any) => {
+          this.validationErrors.delete(table.tableId);
+          this.parentMap.delete(table.tableId);
+        });
       });
     }
   }
