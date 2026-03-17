@@ -3,10 +3,11 @@ import { RouterOutlet } from '@angular/router';
 import { DrillerOrgComponent } from './test/original';
 import { AssemblyDrillerComponent } from './assembly-driller-component/assembly-driller-component';
 import { Drillerv1Component } from './test/v1';
+import { SetFolder } from './set-folder/set-folder';
 
 @Component({
   selector: 'app-root',
-  imports: [AssemblyDrillerComponent, Drillerv1Component],
+  imports: [AssemblyDrillerComponent, Drillerv1Component, SetFolder],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
