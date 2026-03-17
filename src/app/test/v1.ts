@@ -6,6 +6,7 @@ import {
   effect,
   Output,
   EventEmitter,
+  OnInit,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -26,7 +27,7 @@ import { MOCK_ASSEMBLY_HIERARCHY } from './data';
   templateUrl: './v1.component.html',
   styleUrls: ['./v1.component.css'],
 })
-export class Drillerv1Component {
+export class Drillerv1Component implements OnInit {
   @Output() onStructureChange = new EventEmitter<any>();
 
   itemRefs = viewChildren<ElementRef>('itemRef');
@@ -35,7 +36,7 @@ export class Drillerv1Component {
   invalidHoverId = signal<string | null>(null);
   invalidReason: string | null = null;
 
-  rawFileData: any = MOCK_ASSEMBLY_HIERARCHY.data;
+  rawFileData: any = MOCK_ASSEMBLY_HIERARCHY.data.assemblyHierarchy;
   availableImages = signal<any[]>([...MOCK_ASSEMBLY_HIERARCHY.data.assemblyHierarchy.imageList]);
   // Transform TABLES to flatten the nested structure
   availableTables = signal<any[]>(
@@ -87,13 +88,6 @@ export class Drillerv1Component {
   svgScrollY = signal(0);
 
   constructor() {
-    this.refreshView();
-    this.buildParentMap();
-
-    if (this.rawFileData.rootIds.length) {
-      this.selectItem(this.rawFileData.nodes[this.rawFileData.rootIds[0]], 0);
-    }
-
     effect((onCleanup) => {
       this.columns();
       this.selectedIds();
@@ -139,6 +133,14 @@ export class Drillerv1Component {
     });
   }
 
+  ngOnInit(): void {
+    this.refreshView();
+    this.buildParentMap();
+
+    if (this.rawFileData.rootIds.length) {
+      this.selectItem(this.rawFileData.nodes[this.rawFileData.rootIds[0]], 0);
+    }
+  }
   /* ================= DROP VALIDATION ================= */
 
   canEnterAssets = (drag: CdkDrag, drop: CdkDropList): boolean => {

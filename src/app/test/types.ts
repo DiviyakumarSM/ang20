@@ -24,7 +24,9 @@ export interface AssemblyNode {
   assemblyName: string;
   childIds: string[];
   itemOrder: string[];
-
+  mergedProductTable?: string[][];
+  linkedPageProductTable?: any;
+  hotspotDetails?: any;
   assemblyId: string;
   parentAssemblyId: string;
 }
@@ -38,6 +40,7 @@ export interface ExtractedImage {
   type: 'image';
   drawingName: string;
   productDescription: string | null;
+  assemblyId: string;
 }
 
 export interface TablePage {
@@ -45,6 +48,8 @@ export interface TablePage {
   pageNo: string;
   type: 'table';
   pageId: string;
+  assemblyId: string;
+
   pageName: string;
 }
 
