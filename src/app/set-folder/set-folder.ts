@@ -671,7 +671,7 @@ export class SetFolder implements OnInit, OnChanges {
 
     const sortedRootIds = this.sortItemsInOrder(this.rawFileData.rootIds, null);
     this.rawFileData.rootIds = sortedRootIds;
-    cols.push(sortedRootIds.map((id) => this.asNode(id)));
+    cols.push(sortedRootIds.map((id) => this.asNode(id)).filter((n): n is INodeRuntime => !!n));
 
     this.selectedIds().forEach((parentId) => {
       const node = this.asNode(parentId);
@@ -758,6 +758,22 @@ export class SetFolder implements OnInit, OnChanges {
 
     if (isImage) {
       const imgAsset = asset as Model.IAssembly;
+      // Reset any accepted tables from this assembly before removing it
+      const assemblyInNode = node.assemblyList?.find(
+        (i: Model.IAssembly) => i.extractedImgId === assetId,
+      );
+      if (assemblyInNode) {
+        Object.values(assemblyInNode.linkedPageProductTable ?? {}).forEach(
+          (page: Model.ILinkedPageTable) => {
+            page.tables?.forEach((table: Model.ITable) => {
+              if (table.isAccepted && table.tableId) {
+                table.isAccepted = false;
+                node.itemOrder = node.itemOrder?.filter((id) => id !== table.tableId) ?? [];
+              }
+            });
+          },
+        );
+      }
       const alreadyAvailable =
         this.availableImages().findIndex((el) => el.extractedImgId === imgAsset.extractedImgId) !==
         -1;
@@ -772,6 +788,7 @@ export class SetFolder implements OnInit, OnChanges {
       }
       node.assemblyList =
         node.assemblyList?.filter((i: Model.IAssembly) => i.extractedImgId !== assetId) ?? [];
+      this.refreshAvailableTables();
     } else {
       // Table: flip isAccepted to false — it will re-appear in availableTables
       const tbl = asset as ITableRuntime;
@@ -796,6 +813,26 @@ export class SetFolder implements OnInit, OnChanges {
       const node = this.asNode(parentId);
       node.itemOrder = node.itemOrder?.filter((id) => id !== itemId) ?? [];
       node.childIds = node.childIds.filter((id) => id !== itemId);
+      // Assembly being removed: reset its accepted tables before removing
+      if (this.isAssemblyItem(item)) {
+        const assembly = node.assemblyList?.find(
+          (a: Model.IAssembly) => a.extractedImgId === itemId,
+        );
+        if (assembly) {
+          Object.values(assembly.linkedPageProductTable ?? {}).forEach(
+            (page: Model.ILinkedPageTable) => {
+              page.tables?.forEach((table: Model.ITable) => {
+                if (table.isAccepted && table.tableId) {
+                  table.isAccepted = false;
+                  node.itemOrder = node.itemOrder?.filter((id) => id !== table.tableId) ?? [];
+                }
+              });
+            },
+          );
+          this.refreshAvailableTables();
+        }
+      }
+
       node.assemblyList =
         node.assemblyList?.filter((i: Model.IAssembly) => i.extractedImgId !== itemId) ?? [];
 
@@ -845,6 +882,7 @@ export class SetFolder implements OnInit, OnChanges {
         this.refreshAvailableTables();
       } else if (this.isAssemblyItem(item)) {
         node.assemblyList.push(item as Model.IAssembly);
+        this.refreshAvailableTables();
       }
 
       node.itemOrder = this.sortItemsInOrder(node.itemOrder, parentId);
@@ -1231,8 +1269,13 @@ export class SetFolder implements OnInit, OnChanges {
       this.availableTables.update((list) => [...list, ...freedTables]);
     }
 
-    // Recursively delete child nodes
-    node.childIds?.forEach((childId: string) => this.recursiveDeleteNode(childId));
+    // Recursively delete child nodes, but skip any that also exist as root-level items
+    // (they appear in both rootIds and as children - they should survive the parent deletion)
+    node.childIds?.forEach((childId: string) => {
+      if (!this.rawFileData.rootIds.includes(childId)) {
+        this.recursiveDeleteNode(childId);
+      }
+    });
 
     delete this.rawFileData.nodes[nodeId];
     this.parentMap.delete(nodeId);

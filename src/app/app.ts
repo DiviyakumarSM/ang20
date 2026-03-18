@@ -1,15 +1,17 @@
-import { Component, signal } from '@angular/core';
+import { Component, CUSTOM_ELEMENTS_SCHEMA, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { DrillerOrgComponent } from './test/original';
 import { AssemblyDrillerComponent } from './assembly-driller-component/assembly-driller-component';
 import { Drillerv1Component } from './test/v1';
 import { SetFolder } from './set-folder/set-folder';
+import { MatTabsModule } from '@angular/material/tabs';
 
 @Component({
   selector: 'app-root',
-  imports: [AssemblyDrillerComponent, Drillerv1Component, SetFolder],
+  imports: [AssemblyDrillerComponent, Drillerv1Component, SetFolder, MatTabsModule],
   templateUrl: './app.html',
   styleUrl: './app.scss',
+  schemas: [CUSTOM_ELEMENTS_SCHEMA],
 })
 export class App {
   protected readonly title = signal('ang20');
