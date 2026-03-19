@@ -83,6 +83,8 @@ export interface IAssemblyItem {
   extractedImgId: string;
   originalImgId: string;
   drawingName: string;
+  /** Original image name as it appeared in the PDF — used for display */
+  imageNameAsInPDF?: string;
   status: string;
   hotspotDetails: IHotspotDetail[];
   imageUrl?: string;
@@ -108,12 +110,16 @@ export interface IHierarchyNode {
 
 /** Runtime extension of IHierarchyNode with UI-only tracking fields */
 export interface IHierarchyNodeRuntime extends IHierarchyNode {
-  /** Ordered list of child-node IDs, assemblyIds, pending image IDs, and pending table IDs */
+  /** Ordered list of child-node IDs, assemblyIds, pending image IDs, and table IDs */
   itemOrder: string[];
   /** Images dropped but not yet paired with a table */
   pendingImages: IImageListItem[];
-  /** Tables dropped but not yet paired with an image */
+  /** Tables dropped on an empty node (no images yet) — last resort only */
   pendingTables: ITableListItem[];
+  /** Individual table identity map: tableId → ITableListItem.
+   *  Every table present in this node (paired or pending) lives here.
+   *  Used as the single source of truth for column display and dragging. */
+  tableSlots: Record<string, ITableListItem>;
 }
 
 export interface IImageListItem {
@@ -162,6 +168,8 @@ export interface ITableListItem {
   selected?: boolean;
   /** Runtime: true when this table is paired with an image in an IAssemblyItem */
   isPaired?: boolean;
+  /** Runtime: linkedPageProductTable grouped by page — used for column display */
+  pageGroups?: Array<{ pageName: string; pageKey: string; tables: IPageTable[] }>;
 }
 
 export interface IAssemblyHierarchy {

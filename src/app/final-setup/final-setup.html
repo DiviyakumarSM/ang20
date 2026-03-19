@@ -1,5 +1,31 @@
 <div class="driller-wrapper" cdkDropListGroup>
 
+  <!-- ═══════════ VALIDATION PANEL (top-right) ═══════════ -->
+  @if (validationErrors().length > 0 && !validationPanelDismissed()) {
+    <div class="validation-panel">
+      <div class="validation-panel-header">
+        <span class="validation-panel-title">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          Issues ({{ validationErrors().length }})
+        </span>
+        <button class="validation-panel-close" (click)="validationPanelDismissed.set(true)" title="Dismiss">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <ul class="validation-panel-list">
+        @for (err of validationErrors(); track $index) {
+          <li class="validation-panel-item">{{ err }}</li>
+        }
+      </ul>
+    </div>
+  }
+
   <!-- ═══════════ AVAILABLE ASSETS PANEL ═══════════ -->
   <div class="available-assets-panel">
     <div class="assets-header">
@@ -267,36 +293,40 @@
                                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                               </svg>
                             </button>
-                            <!-- <button class="edit-btn" (click)="removeTableFromColumn(it, i); $event.stopPropagation()" title="Remove table">
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                              </svg>
-                            </button> -->
                           </div>
                         </div>
+
                         @if (!it.isPaired) {
                           <div class="pending-hint">⚠ needs image</div>
                         }
-                        @if (it.tables?.[0]?.tableData?.length > 0) {
-                          <table class="data-table">
-                            <thead>
-                              <tr>
-                                @for (h of it.tables[0].tableData[0]; track $index) {
-                                  <th [title]="h">{{ h }}</th>
-                                }
-                              </tr>
-                            </thead>
-                            <tbody>
-                              @for (row of it.tables[0].tableData.slice(1, 3); track $index) {
-                                <tr class="data-row">
-                                  @for (cell of row; track $index) {
-                                    <td [title]="cell">{{ cell }}</td>
+
+                        <!-- Flat deduplicated table list from linkedPageProductTable -->
+                        @for (tableEntry of it.tables; track $index) {
+                          @if (tableEntry.tableData?.length > 0) {
+                            @if (it.tables.length > 1) {
+                              <div class="table-section-label">
+                                {{ tableEntry.tableNameAsInPDF?.replaceAll('_', ' ') || tableEntry.tableName }}
+                              </div>
+                            }
+                            <table class="data-table">
+                              <thead>
+                                <tr>
+                                  @for (h of tableEntry.tableData[0]; track $index) {
+                                    <th [title]="h">{{ h }}</th>
                                   }
                                 </tr>
-                              }
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody>
+                                @for (row of tableEntry.tableData.slice(1, 3); track $index) {
+                                  <tr class="data-row">
+                                    @for (cell of row; track $index) {
+                                      <td [title]="cell">{{ cell }}</td>
+                                    }
+                                  </tr>
+                                }
+                              </tbody>
+                            </table>
+                          }
                         }
                       </div>
                     }

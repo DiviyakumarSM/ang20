@@ -73,6 +73,10 @@ export class FinalSetup implements OnInit {
   // Save state: disabled when any node has partial drop (image without table or vice-versa)
   disableSave = signal(true);
 
+  // Validation errors shown in the top-right panel
+  validationErrors = signal<string[]>([]);
+  validationPanelDismissed = signal(false);
+
   // Zoom
   zoomLevel = signal(0.9);
   readonly minZoom = 0.5;
@@ -148,9 +152,11 @@ export class FinalSetup implements OnInit {
   private initNodes(): void {
     Object.values(this.rawFileData.nodes).forEach((n) => {
       const node = n as Model.IHierarchyNodeRuntime;
+      if (!node.pendingImages) node.pendingImages = [];
+      if (!node.pendingTables) node.pendingTables = [];
+      if (!node.tableSlots) node.tableSlots = {};
+
       if (!node.itemOrder) {
-        // Build itemOrder: child nodes, then one entry per image + one entry per unique table.
-        // tableListItemId is only set on assemblies WE created; existing mock data uses assemblyId as fallback.
         const usedTableIds = new Set<string>();
         node.itemOrder = [...node.childIds];
         node.assemblyList.forEach((a) => {
@@ -159,11 +165,12 @@ export class FinalSetup implements OnInit {
           if (!usedTableIds.has(tid)) {
             usedTableIds.add(tid);
             node.itemOrder.push(tid);
+            // Seed tableSlots from existing assembly data
+            const tbl = this.tableFromAssembly(a);
+            if (tbl) node.tableSlots[tid] = tbl;
           }
         });
       }
-      if (!node.pendingImages) node.pendingImages = [];
-      if (!node.pendingTables) node.pendingTables = [];
     });
   }
 
@@ -173,9 +180,8 @@ export class FinalSetup implements OnInit {
     const usedIds = new Set<string>();
     Object.values(this.rawFileData.nodes).forEach((n) => {
       const node = n as Model.IHierarchyNodeRuntime;
-      node.assemblyList.forEach((a) => {
-        usedIds.add(a.tableListItemId ?? a.assemblyId);
-      });
+      // tableSlots is the canonical set of tables used in a node
+      Object.keys(node.tableSlots ?? {}).forEach((id) => usedIds.add(id));
       node.pendingTables.forEach((t) => usedIds.add(t.tableId));
     });
     this.availableTables.set(
@@ -218,7 +224,7 @@ export class FinalSetup implements OnInit {
     return {
       extractedImgId: assembly.extractedImgId,
       drawingName: assembly.drawingName,
-      imageNameAsInPDF: assembly.prespectiveName || assembly.drawingName,
+      imageNameAsInPDF: assembly.imageNameAsInPDF || assembly.drawingName,
       productId: assembly.productId,
       productDescription: null,
       extractedImgVersion: assembly.extractedImgVersion,
@@ -243,27 +249,50 @@ export class FinalSetup implements OnInit {
   private tableFromAssembly(assembly: Model.IAssemblyItem): Model.ITableListItem | null {
     const pages = Object.values(assembly.linkedPageProductTable ?? {});
     if (!pages.length) return null;
-    const page = pages[0];
-    // Use tableListItemId if set (our created assemblies), else assemblyId (existing data)
     const tableId = assembly.tableListItemId ?? assembly.assemblyId;
+    const firstPage = pages[0];
+
+    // Flat deduplicated table list (same tableNameAsInPDF across pages → clubbed into one)
+    const seenNames = new Set<string>();
+    const allTables: Model.ITableEntry[] = [];
+    for (const page of pages) {
+      for (const t of page.tables) {
+        const key = t.tableNameAsInPDF || t.tableName;
+        if (!seenNames.has(key)) {
+          seenNames.add(key);
+          allTables.push({
+            tableId,
+            tableNameAsInPDF: t.tableNameAsInPDF,
+            tableName: t.tableName,
+            isAccepted: true,
+            order: t.order,
+            tableData: t.tableData,
+          });
+        }
+      }
+    }
+
+    // Page-grouped structure: each page from linkedPageProductTable becomes a group
+    const pageGroups = pages
+      .filter((page) => page.tables.some((t) => (t.tableData?.length ?? 0) > 0))
+      .map((page) => ({
+        pageName: page.pageName,
+        pageKey: page.pageKey,
+        tables: page.tables.filter((t) => (t.tableData?.length ?? 0) > 0),
+      }));
+
     return {
-      pageId: page.pageId,
-      pageName: page.pageName,
+      pageId: firstPage.pageId,
+      pageName: firstPage.pageName,
       tableId,
-      pageNo: page.pageKey,
+      pageNo: firstPage.pageKey,
       type: 'table',
-      order: page.tables[0]?.order ?? 1,
-      tableNameAsInPDF: page.tables[0]?.tableNameAsInPDF ?? '',
-      tableName: page.tables[0]?.tableName ?? '',
-      tables: page.tables.map((t) => ({
-        tableId,
-        tableNameAsInPDF: t.tableNameAsInPDF,
-        tableName: t.tableName,
-        isAccepted: true,
-        order: t.order,
-        tableData: t.tableData,
-      })),
-      isPaired: true,
+      order: firstPage.tables[0]?.order ?? 1,
+      tableNameAsInPDF: firstPage.tables[0]?.tableNameAsInPDF ?? '',
+      tableName: firstPage.tables[0]?.tableName ?? '',
+      tables: allTables,
+      isPaired: !!assembly.extractedImgId,
+      pageGroups,
     };
   }
 
@@ -286,7 +315,8 @@ export class FinalSetup implements OnInit {
 
       const seenTableIds = new Set<string>();
       const nodeItems: ColumnItem[] = [];
-      const assetItems: ColumnItem[] = [];
+      const imageItems: ColumnItem[] = [];
+      const tableItems: ColumnItem[] = [];
 
       for (const id of node.itemOrder) {
         // Child node? → always goes to top group
@@ -300,42 +330,29 @@ export class FinalSetup implements OnInit {
         const assemblyForImage = node.assemblyList.find((a) => a.extractedImgId === id);
         if (assemblyForImage) {
           const hasTable = Object.keys(assemblyForImage.linkedPageProductTable ?? {}).length > 0;
-          assetItems.push({ ...this.imageFromAssembly(assemblyForImage), isPaired: hasTable });
+          imageItems.push({ ...this.imageFromAssembly(assemblyForImage), isPaired: hasTable });
           continue;
         }
 
-        // Table from assembly (match by tableListItemId ?? assemblyId, dedup)?
-        const assemblyForTable = node.assemblyList.find(
-          (a) => (a.tableListItemId ?? a.assemblyId) === id,
-        );
-        if (assemblyForTable) {
-          if (!seenTableIds.has(id)) {
-            seenTableIds.add(id);
-            const tbl = this.tableFromAssembly(assemblyForTable);
-            if (tbl) {
-              assetItems.push({ ...tbl, isPaired: !!assemblyForTable.extractedImgId });
-            }
-          }
+        // Individual table from tableSlots — each entry is its own draggable item
+        const tblSlot = node.tableSlots?.[id];
+        if (tblSlot && !seenTableIds.has(id)) {
+          seenTableIds.add(id);
+          const hasImage = node.assemblyList.some((a) => !!a.extractedImgId);
+          tableItems.push({ ...tblSlot, isPaired: hasImage });
           continue;
         }
 
         // Pending image?
         const pendingImg = node.pendingImages.find((img) => img.extractedImgId === id);
         if (pendingImg) {
-          assetItems.push({ ...pendingImg, isPaired: false });
+          imageItems.push({ ...pendingImg, isPaired: false });
           continue;
-        }
-
-        // Pending table (dedup)?
-        const pendingTbl = node.pendingTables.find((t) => t.tableId === id);
-        if (pendingTbl && !seenTableIds.has(pendingTbl.tableId)) {
-          seenTableIds.add(pendingTbl.tableId);
-          assetItems.push({ ...pendingTbl, isPaired: false });
         }
       }
 
-      // Sub-assemblies always at top, images/tables always at bottom
-      cols.push([...nodeItems, ...assetItems]);
+      // Order: sub-assemblies → images → tables
+      cols.push([...nodeItems, ...imageItems, ...tableItems]);
     });
 
     this.columns.set(cols);
@@ -343,16 +360,51 @@ export class FinalSetup implements OnInit {
   }
 
   private updateSaveState(): void {
-    const hasPartial = Object.values(this.rawFileData.nodes).some((n) => {
+    const errors = this.validateHierarchy();
+    const isValid = errors.length === 0;
+    if (errors.length > 0) this.validationPanelDismissed.set(false);
+    this.validationErrors.set(errors);
+    this.disableSave.set(!isValid);
+    console.log('[FinalSetup] validation errors:', errors);
+  }
+
+  private validateHierarchy(): string[] {
+    const errors: string[] = [];
+
+    Object.values(this.rawFileData.nodes).forEach((n) => {
       const node = n as Model.IHierarchyNodeRuntime;
-      const hasUnpairedAssembly = node.assemblyList.some(
-        (a) =>
-          !a.extractedImgId ||
-          Object.keys(a.linkedPageProductTable ?? {}).length === 0,
-      );
-      return node.pendingImages.length > 0 || node.pendingTables.length > 0 || hasUnpairedAssembly;
+      const label = `"${node.assemblyName || node.hierarchyId}"`;
+
+      // Per-assembly checks: image with no table, or table with no image
+      const unpairedImages = node.assemblyList.filter(
+        (a) => !!a.extractedImgId && Object.keys(a.linkedPageProductTable ?? {}).length === 0,
+      ).length + node.pendingImages.length;
+
+      const unpairedTables = node.assemblyList.filter(
+        (a) => !a.extractedImgId && Object.keys(a.linkedPageProductTable ?? {}).length > 0,
+      ).length + node.pendingTables.length;
+
+      if (unpairedImages > 0) {
+        errors.push(
+          `${label}: ${unpairedImages} image(s) without a table — assign a table to complete`,
+        );
+      }
+      if (unpairedTables > 0) {
+        errors.push(
+          `${label}: ${unpairedTables} table(s) without an image — assign an image to complete`,
+        );
+      }
+
+      // perspectiveName uniqueness within assemblyList
+      const names = node.assemblyList.map((a) => a.prespectiveName).filter(Boolean);
+      const dupes = names.filter((name, idx) => names.indexOf(name) !== idx);
+      if (dupes.length > 0) {
+        const unique = [...new Set(dupes)];
+        errors.push(`${label}: duplicate perspective name(s): ${unique.join(', ')}`);
+      }
     });
-    this.disableSave.set(hasPartial);
+
+    return errors;
   }
 
   buildParentMap(): void {
@@ -395,6 +447,19 @@ export class FinalSetup implements OnInit {
     return this.selectedIds()[colIdx] === this.getItemId(item);
   }
 
+  /* ================= HIERARCHY UTILS ================= */
+
+  /**
+   * Returns true if nodeId is the same as targetId OR is an ancestor of targetId.
+   * Used to prevent dropping a node into itself or one of its own descendants.
+   */
+  private isAncestorOrSelf(nodeId: string, targetId: string): boolean {
+    if (nodeId === targetId) return true;
+    const node = this.rawFileData.nodes[nodeId] as Model.IHierarchyNodeRuntime | undefined;
+    if (!node) return false;
+    return node.childIds.some((childId) => this.isAncestorOrSelf(childId, targetId));
+  }
+
   /* ================= DROP PREDICATES ================= */
 
   canEnterColumn = (drag: CdkDrag<ColumnItem>, drop: CdkDropList<IDropListData>): boolean => {
@@ -408,6 +473,12 @@ export class FinalSetup implements OnInit {
         return false;
       }
       return true;
+    }
+
+    // Prevent dropping a node into itself or any of its own descendants
+    if (this.isNode(item) && this.isAncestorOrSelf(item.hierarchyId, target.parentId)) {
+      this.invalidHoverId.set(item.hierarchyId);
+      return false;
     }
 
     this.invalidHoverId.set(null);
@@ -481,25 +552,62 @@ export class FinalSetup implements OnInit {
 
     // ── Transfer node between columns ──
     if (this.isNode(item)) {
+      // Guard: never drop a node into itself or its own descendants
+      if (target.parentId && this.isAncestorOrSelf(item.hierarchyId, target.parentId)) return;
       this.removeNodeFromParent(item.hierarchyId, source.parentId);
       this.addNodeToParent(item.hierarchyId, target.parentId, event.currentIndex);
       this.emitChange(source.parentId, 'TRANSFER_OUT');
       this.emitChange(target.parentId, 'TRANSFER_IN');
       this.refreshView();
       this.scheduleArrows();
+      return;
+    }
+
+    // ── Transfer image between sub-assemblies ──
+    if (this.isImage(item) && source.parentId && target.parentId) {
+      this.moveImageBetweenNodes(item as Model.IImageListItem, source.parentId, target.parentId);
+      this.emitChange(source.parentId, 'TRANSFER_IMAGE_OUT');
+      this.emitChange(target.parentId, 'TRANSFER_IMAGE_IN');
+      this.refreshView();
+      this.scheduleArrows();
+      return;
+    }
+
+    // ── Transfer table between sub-assemblies ──
+    if (this.isTable(item) && source.parentId && target.parentId) {
+      this.moveTableBetweenNodes(item as Model.ITableListItem, source.parentId, target.parentId);
+      this.emitChange(source.parentId, 'TRANSFER_TABLE_OUT');
+      this.emitChange(target.parentId, 'TRANSFER_TABLE_IN');
+      this.refreshView();
+      this.scheduleArrows();
+      return;
     }
   }
 
   /* ================= ASSEMBLY CREATION LOGIC ================= */
 
   private handleImageDrop(image: Model.IImageListItem, node: Model.IHierarchyNodeRuntime): void {
-    // Remove from available list
+    // Remove from available list and sync rawFileData
     this.availableImages.update((list) =>
       list.filter((img) => img.extractedImgId !== image.extractedImgId),
     );
     this.rawFileData.imageList = this.availableImages();
+    this.pairImageWithNode(image, node);
+  }
 
-    // Re-fill a table-only assembly (image was previously removed)
+  private handleTableDrop(table: Model.ITableListItem, node: Model.IHierarchyNodeRuntime): void {
+    // Remove from available list and sync rawFileData
+    this.availableTables.update((list) => list.filter((t) => t.tableId !== table.tableId));
+    this.rawFileData.tableList = this.availableTables();
+    this.pairTableWithNode(table, node);
+  }
+
+  /**
+   * Core image-pairing logic — does NOT touch availableImages/rawFileData.imageList.
+   * Called by handleImageDrop (from available panel) and moveImageBetweenNodes (cross-node).
+   */
+  private pairImageWithNode(image: Model.IImageListItem, node: Model.IHierarchyNodeRuntime): void {
+    // Re-fill a table-only assembly (image slot was previously cleared)
     const tableOnlyAssembly = node.assemblyList.find(
       (a) => !a.extractedImgId && Object.keys(a.linkedPageProductTable ?? {}).length > 0,
     );
@@ -515,17 +623,18 @@ export class FinalSetup implements OnInit {
       node.itemOrder = node.itemOrder.filter((id) => id !== table.tableId);
       const assembly = this.createAssemblyItem(image, table, node);
       node.assemblyList.push(assembly);
-      // Image and table as separate entries in itemOrder
       node.itemOrder.push(image.extractedImgId);
       node.itemOrder.push(table.tableId);
     } else if (node.assemblyList.length > 0) {
-      // Node already has at least one complete assembly — reuse its table for the new image.
-      const existingAssembly = node.assemblyList[node.assemblyList.length - 1];
-      const virtualTable = this.tableFromAssembly(existingAssembly);
+      // Reuse the table of the last complete assembly for the new image
+      const withTable = node.assemblyList.filter(
+        (a: Model.IAssemblyItem) => Object.keys(a.linkedPageProductTable ?? {}).length > 0,
+      );
+      const lastAssembly = withTable[withTable.length - 1] ?? null;
+      const virtualTable = lastAssembly ? this.tableFromAssembly(lastAssembly) : null;
       if (virtualTable) {
         const assembly = this.createAssemblyItem(image, virtualTable, node);
         node.assemblyList.push(assembly);
-        // Only push image ID — table's ID is already in itemOrder
         node.itemOrder.push(image.extractedImgId);
       } else {
         node.pendingImages.push(image);
@@ -538,49 +647,73 @@ export class FinalSetup implements OnInit {
     }
   }
 
-  private handleTableDrop(table: Model.ITableListItem, node: Model.IHierarchyNodeRuntime): void {
-    // Remove from available list
-    this.availableTables.update((list) => list.filter((t) => t.tableId !== table.tableId));
+  /**
+   * Core table-pairing logic — does NOT touch availableTables/rawFileData.tableList.
+   * Each table keeps its own identity in node.tableSlots (one entry = one draggable column item).
+   * Each table also gets its own assembly entry so the output payload is complete.
+   */
+  private pairTableWithNode(table: Model.ITableListItem, node: Model.IHierarchyNodeRuntime): void {
+    if (!node.tableSlots) node.tableSlots = {};
 
-    // Re-fill an image-only assembly (table was previously removed)
+    // ── Same table dropped again — refresh its data in place ──
+    if (node.tableSlots[table.tableId]) {
+      node.tableSlots[table.tableId] = table;
+      node.assemblyList
+        .filter((a) => (a.tableListItemId ?? a.assemblyId) === table.tableId)
+        .forEach((a) => this.fillAssemblyFromTable(table, a));
+      return;
+    }
+
+    // Register — makes this table a separate draggable item in the column
+    node.tableSlots[table.tableId] = table;
+    node.itemOrder.push(table.tableId);
+
+    // 1. Pair with any pending images (creates new assemblies)
+    if (node.pendingImages.length > 0) {
+      while (node.pendingImages.length > 0) {
+        const image = node.pendingImages.shift()!;
+        node.itemOrder = node.itemOrder.filter((id) => id !== image.extractedImgId);
+        const assembly = this.createAssemblyItem(image, table, node);
+        node.assemblyList.push(assembly);
+        node.itemOrder.push(image.extractedImgId);
+      }
+      return;
+    }
+
+    // 2. Fill an image-only slot (extractedImgId set but no table yet)
     const imageOnlyAssembly = node.assemblyList.find(
       (a) => !!a.extractedImgId && Object.keys(a.linkedPageProductTable ?? {}).length === 0,
     );
     if (imageOnlyAssembly) {
       this.fillAssemblyFromTable(table, imageOnlyAssembly);
-      node.itemOrder.push(table.tableId);
       return;
     }
 
-    if (node.pendingImages.length > 0) {
-      // Pair with first pending image → create IAssemblyItem
-      const image = node.pendingImages.shift()!;
-      node.itemOrder = node.itemOrder.filter((id) => id !== image.extractedImgId);
-      const assembly = this.createAssemblyItem(image, table, node);
-      node.assemblyList.push(assembly);
-      // Image and table as separate entries in itemOrder
-      node.itemOrder.push(image.extractedImgId);
-      node.itemOrder.push(table.tableId);
-    } else {
-      // Store as pending table
-      node.pendingTables.push(table);
-      node.itemOrder.push(table.tableId);
+    // 3. Create a parallel assembly reusing the primary image (1 image + N tables use case)
+    const primaryAssembly = node.assemblyList.find((a) => !!a.extractedImgId);
+    if (primaryAssembly) {
+      const imageRef = this.imageFromAssembly(primaryAssembly);
+      const newAssembly = this.createAssemblyItem(imageRef, table, node);
+      node.assemblyList.push(newAssembly);
+      // extractedImgId is already in itemOrder — do NOT push it again
+      return;
     }
+
+    // 4. No images at all — store in pendingTables for later pairing (last resort)
+    node.pendingTables.push(table);
   }
 
   private fillAssemblyFromImage(image: Model.IImageListItem, assembly: Model.IAssemblyItem): void {
-    // productId stays as already set on the assembly (derived from node classCode)
-    const drawingName = this.computeDrawingName(assembly.productId, image.prespectiveName);
-    const svgHeader = this.updateSvgHeader(image.svgHeader, image.drawingName, drawingName);
     assembly.extractedImgId = image.extractedImgId;
     assembly.extractedImgVersion = image.extractedImgVersion;
     assembly.pageId = image.pageId;
-    assembly.prespectiveName = image.prespectiveName;
-    assembly.drawingName = drawingName;
+    assembly.drawingName = image.drawingName;
+    assembly.imageNameAsInPDF = image.imageNameAsInPDF || image.drawingName;
+    assembly.svgFileName = image.svgFileName || '';
     assembly.svgFileId = image.svgFileId ?? '';
-    assembly.svgFileName = image.svgFileName;
-    assembly.svgHeader = svgHeader;
+    assembly.svgHeader = image.svgHeader || '';
     assembly.hotspotDetails = image.hotspotDetails;
+    assembly.imageUrl = image.imageUrl;
     assembly.originalImgId = '';
     assembly.originalImgVersion = 0;
   }
@@ -628,27 +761,30 @@ export class FinalSetup implements OnInit {
       return;
     }
 
-    // Paired image — null image fields on its assembly, restore image to available
-    const assembly = node.assemblyList.find((a) => a.extractedImgId === image.extractedImgId);
-    if (!assembly) return;
+    // Paired image — null image fields on ALL assemblies sharing this extractedImgId
+    const assemblies = node.assemblyList.filter((a) => a.extractedImgId === image.extractedImgId);
+    if (!assemblies.length) return;
 
-    const restored = { ...this.imageFromAssembly(assembly), isPaired: undefined, selected: false };
+    const restored = { ...this.imageFromAssembly(assemblies[0]), isPaired: undefined, selected: false };
     this.availableImages.update((list) => [...list, restored]);
     this.rawFileData.imageList = this.availableImages();
 
-    node.itemOrder = node.itemOrder.filter((id) => id !== assembly.extractedImgId);
+    node.itemOrder = node.itemOrder.filter((id) => id !== image.extractedImgId);
 
-    // Null out image-oriented fields
-    assembly.extractedImgId = '';
-    assembly.svgFileId = '';
-    assembly.svgFileName = '';
-    assembly.svgHeader = '';
-    assembly.hotspotDetails = [];
-    assembly.drawingName = '';
-    assembly.prespectiveName = '';
-    assembly.extractedImgVersion = 0;
-    assembly.originalImgId = '';
-    assembly.originalImgVersion = 0;
+    assemblies.forEach((a) => {
+      a.extractedImgId = '';
+      a.imageNameAsInPDF = undefined;
+      a.svgFileId = '';
+      a.svgFileName = '';
+      a.svgHeader = '';
+      a.hotspotDetails = [];
+      a.drawingName = '';
+      a.imageUrl = undefined;
+      a.extractedImgVersion = 0;
+      a.originalImgId = '';
+      a.originalImgVersion = 0;
+    });
+    this.cleanupGhostAssemblies(node);
 
     this.emitChange(parentId, 'REMOVE_IMAGE');
     this.refreshView();
@@ -669,37 +805,135 @@ export class FinalSetup implements OnInit {
       node.itemOrder = node.itemOrder.filter((id) => id !== tableKey);
       const restored = { ...table, isPaired: undefined, selected: false };
       this.availableTables.update((list) => [...list, restored]);
+      this.rawFileData.tableList = this.availableTables();
       this.emitChange(parentId, 'REMOVE_TABLE');
       this.refreshView();
       this.scheduleArrows();
       return;
     }
 
-    // Paired table — null table fields on all assemblies using this key, restore table to available
-    const assemblies = node.assemblyList.filter(
-      (a) => (a.tableListItemId ?? a.assemblyId) === tableKey,
-    );
-    if (!assemblies.length) return;
+    // Paired table — restore from tableSlots, clear assemblies, remove from slot
+    const slotTable = node.tableSlots?.[tableKey];
+    if (!slotTable) return;
 
-    const restoredTable = this.tableFromAssembly(assemblies[0]);
-    if (restoredTable) {
-      this.availableTables.update((list) => [
-        ...list,
-        { ...restoredTable, isPaired: undefined, selected: false },
-      ]);
-    }
+    this.availableTables.update((list) => [
+      ...list,
+      { ...slotTable, isPaired: undefined, selected: false },
+    ]);
+    this.rawFileData.tableList = this.availableTables();
 
+    if (node.tableSlots) delete node.tableSlots[tableKey];
     node.itemOrder = node.itemOrder.filter((id) => id !== tableKey);
 
-    assemblies.forEach((a) => {
-      a.linkedPageProductTable = {};
-      a.mergedProductTable = [];
-      a.tableListItemId = undefined;
-    });
+    node.assemblyList
+      .filter((a) => (a.tableListItemId ?? a.assemblyId) === tableKey)
+      .forEach((a) => {
+        a.linkedPageProductTable = {};
+        a.mergedProductTable = [];
+        a.tableListItemId = undefined;
+      });
 
     this.emitChange(parentId, 'REMOVE_TABLE');
     this.refreshView();
     this.scheduleArrows();
+  }
+
+  private moveImageBetweenNodes(
+    image: Model.IImageListItem,
+    fromParentId: string,
+    toParentId: string,
+  ): void {
+    const fromNode = this.asNode(fromParentId);
+    const toNode = this.asNode(toParentId);
+
+    // Remove from pending images
+    const pendingIdx = fromNode.pendingImages.findIndex(
+      (img) => img.extractedImgId === image.extractedImgId,
+    );
+    if (pendingIdx !== -1) {
+      fromNode.pendingImages.splice(pendingIdx, 1);
+      fromNode.itemOrder = fromNode.itemOrder.filter((id) => id !== image.extractedImgId);
+      this.pairImageWithNode(image, toNode);
+      return;
+    }
+
+    // Remove from paired assemblies — null out image fields on ALL sharing extractedImgId
+    const assemblies = fromNode.assemblyList.filter(
+      (a) => a.extractedImgId === image.extractedImgId,
+    );
+    if (!assemblies.length) return;
+    fromNode.itemOrder = fromNode.itemOrder.filter((id) => id !== image.extractedImgId);
+    // Capture the full image object before clearing (preserves imageNameAsInPDF etc.)
+    const imageToMove = this.imageFromAssembly(assemblies[0]);
+    assemblies.forEach((a) => {
+      a.extractedImgId = '';
+      a.imageNameAsInPDF = undefined;
+      a.svgFileId = '';
+      a.svgFileName = '';
+      a.svgHeader = '';
+      a.hotspotDetails = [];
+      a.drawingName = '';
+      a.imageUrl = undefined;
+      a.extractedImgVersion = 0;
+      a.originalImgId = '';
+      a.originalImgVersion = 0;
+    });
+    this.cleanupGhostAssemblies(fromNode);
+    this.pairImageWithNode(imageToMove, toNode);
+  }
+
+  /**
+   * Remove any table-only assembly (no image) whose table is already covered by
+   * another assembly in the same node that still has an image.
+   * These ghosts are created when a shared-table parallel assembly loses its image
+   * while the other assembly referencing the same table remains intact.
+   */
+  private cleanupGhostAssemblies(node: Model.IHierarchyNodeRuntime): void {
+    const coveredTableIds = new Set(
+      node.assemblyList
+        .filter((a) => !!a.extractedImgId)
+        .map((a) => a.tableListItemId ?? a.assemblyId),
+    );
+    node.assemblyList = node.assemblyList.filter((a) => {
+      if (!a.extractedImgId && Object.keys(a.linkedPageProductTable ?? {}).length > 0) {
+        return !coveredTableIds.has(a.tableListItemId ?? a.assemblyId);
+      }
+      return true;
+    });
+  }
+
+  private moveTableBetweenNodes(
+    table: Model.ITableListItem,
+    fromParentId: string,
+    toParentId: string,
+  ): void {
+    const fromNode = this.asNode(fromParentId);
+    const toNode = this.asNode(toParentId);
+    const tableKey = table.tableId;
+
+    // Remove from pending tables
+    const pendingIdx = fromNode.pendingTables.findIndex((t) => t.tableId === tableKey);
+    if (pendingIdx !== -1) {
+      fromNode.pendingTables.splice(pendingIdx, 1);
+      fromNode.itemOrder = fromNode.itemOrder.filter((id) => id !== tableKey);
+      this.pairTableWithNode(table, toNode);
+      return;
+    }
+
+    // Get the canonical table object from tableSlots before clearing
+    const tableToMove = fromNode.tableSlots?.[tableKey] ?? table;
+    // Remove from tableSlots and itemOrder
+    if (fromNode.tableSlots) delete fromNode.tableSlots[tableKey];
+    fromNode.itemOrder = fromNode.itemOrder.filter((id) => id !== tableKey);
+    // Null out table fields on all assemblies that referenced this table
+    fromNode.assemblyList
+      .filter((a) => (a.tableListItemId ?? a.assemblyId) === tableKey)
+      .forEach((a) => {
+        a.linkedPageProductTable = {};
+        a.mergedProductTable = [];
+        a.tableListItemId = undefined;
+      });
+    this.pairTableWithNode(tableToMove, toNode);
   }
 
   private createAssemblyItem(
@@ -708,9 +942,8 @@ export class FinalSetup implements OnInit {
     node: Model.IHierarchyNodeRuntime,
   ): Model.IAssemblyItem {
     const firstTable = table.tables[0];
-    const productId = node.classCode.replace(/^CLASS_/, '');
-    const drawingName = this.computeDrawingName(productId, image.prespectiveName);
-    const svgHeader = this.updateSvgHeader(image.svgHeader, image.drawingName, drawingName);
+    const productId = node.hierarchyId;
+    const prespectiveName = this.generatePrespectiveName(node);
     return {
       assemblyId: uuidv4(),
       tableListItemId: table.tableId,
@@ -719,11 +952,13 @@ export class FinalSetup implements OnInit {
       selectedImageIndex: 0,
       productId,
       pageId: image.pageId,
-      drawingName,
-      prespectiveName: image.prespectiveName,
+      drawingName: image.drawingName,
+      imageNameAsInPDF: image.imageNameAsInPDF || image.drawingName,
+      prespectiveName,
       svgFileId: image.svgFileId ?? '',
-      svgFileName: image.svgFileName,
-      svgHeader,
+      svgFileName: image.svgFileName || '',
+      svgHeader: image.svgHeader || '',
+      imageUrl: image.imageUrl,
       hotspotDetails: image.hotspotDetails,
       originalImgId: '',
       originalImgVersion: 0,
@@ -756,17 +991,16 @@ export class FinalSetup implements OnInit {
     };
   }
 
-  /* ================= DRAWING NAME / SVG HEADER HELPERS ================= */
-
-  /** drawingName = productId_prespectiveName  (or just productId when prespectiveName is absent) */
-  private computeDrawingName(productId: string, prespectiveName: string): string {
-    return prespectiveName ? `${productId}_${prespectiveName}` : productId;
-  }
-
-  /** Replace every occurrence of oldName in svgHeader with newName */
-  private updateSvgHeader(svgHeader: string, oldName: string, newName: string): string {
-    if (!oldName || oldName === newName) return svgHeader;
-    return svgHeader.split(oldName).join(newName);
+  /** Generate next unique prespectiveName (View A, View B, …) for a new assembly in the node */
+  private generatePrespectiveName(node: Model.IHierarchyNodeRuntime): string {
+    const used = new Set(node.assemblyList.map((a) => a.prespectiveName).filter(Boolean));
+    let idx = 0;
+    let name: string;
+    do {
+      name = `View ${String.fromCharCode(65 + (idx % 26))}${idx >= 26 ? Math.floor(idx / 26) : ''}`;
+      idx++;
+    } while (used.has(name));
+    return name;
   }
 
   /* ================= NODE MUTATIONS ================= */
@@ -883,6 +1117,7 @@ export class FinalSetup implements OnInit {
       itemOrder: [],
       pendingImages: [],
       pendingTables: [],
+      tableSlots: {},
     };
     this.rawFileData.nodes[newId] = newNode;
     if (!parentId) {
