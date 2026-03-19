@@ -1,0 +1,415 @@
+<div class="driller-wrapper" cdkDropListGroup>
+
+  <!-- ═══════════ AVAILABLE ASSETS PANEL ═══════════ -->
+  <div class="available-assets-panel">
+    <div class="assets-header">
+      <h3>Extracted Images &amp; Tables</h3>
+    </div>
+
+    <div class="assets-content">
+
+      <!-- Images -->
+      <div class="assets-section">
+        <div class="section-header">
+          <span>Images</span>
+          <span class="section-count">({{ availableImages().length }})</span>
+        </div>
+        <div
+          cdkDropList
+          class="assets-list"
+          [cdkDropListData]="{ parentId: 'IMAGES', index: -1 }"
+          [cdkDropListEnterPredicate]="canEnterImagesPanel"
+          (cdkDropListDropped)="$event"
+        >
+          @for (img of availableImages(); track img.extractedImgId) {
+            <div
+              cdkDrag
+              [cdkDragData]="img"
+              class="asset-item"
+              [attr.data-id]="img.extractedImgId"
+              [attr.data-type]="'image'"
+              [title]="img.imageNameAsInPDF || img.drawingName"
+              (cdkDragStarted)="isDragging.set(true)"
+              (cdkDragEnded)="isDragging.set(false); invalidHoverId.set(null)"
+            >
+              <label class="checkbox-wrapper" (click)="$event.stopPropagation()">
+                <input type="checkbox" [(ngModel)]="$any(img)['selected']" />
+              </label>
+              <span class="asset-name">{{
+                img.imageNameAsInPDF
+                  ? img.imageNameAsInPDF.replaceAll('_', ' ')
+                  : img.drawingName
+              }}</span>
+              <span class="drag-handle">⋮⋮</span>
+            </div>
+          }
+          @if (availableImages().length === 0) {
+            <div class="empty-state">No images available</div>
+          }
+        </div>
+      </div>
+
+      <!-- Tables -->
+      <div class="assets-section">
+        <div class="section-header">
+          <span>Tables</span>
+          <span class="section-count">({{ availableTables().length }})</span>
+        </div>
+        <div
+          cdkDropList
+          class="assets-list"
+          [cdkDropListData]="{ parentId: 'TABLES', index: -1 }"
+          [cdkDropListEnterPredicate]="canEnterTablesPanel"
+          (cdkDropListDropped)="$event"
+        >
+          @for (tbl of availableTables(); track tbl.tableId) {
+            <div
+              cdkDrag
+              [cdkDragData]="tbl"
+              class="asset-item"
+              [attr.data-id]="tbl.tableId"
+              [attr.data-type]="'table'"
+              [title]="tbl.tableNameAsInPDF || tbl.tableName"
+              (cdkDragStarted)="isDragging.set(true)"
+              (cdkDragEnded)="isDragging.set(false); invalidHoverId.set(null)"
+            >
+              <label class="checkbox-wrapper" (click)="$event.stopPropagation()">
+                <input type="checkbox" [(ngModel)]="$any(tbl)['selected']" />
+              </label>
+              <span class="asset-name">{{
+                tbl.tableNameAsInPDF
+                  ? tbl.tableNameAsInPDF.replaceAll('_', ' ')
+                  : tbl.tableName
+              }}</span>
+              <span class="drag-handle">⋮⋮</span>
+            </div>
+          }
+          @if (availableTables().length === 0) {
+            <div class="empty-state">No tables available</div>
+          }
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════ LEVELS AREA ═══════════ -->
+  <div class="levels-outer">
+    <div class="levels-area">
+
+      <!-- SVG connector layer — same as set-folder -->
+      <svg class="levels-connector-layer" style="width: 100%; height: 100%">
+        <defs>
+          <marker
+            id="arrow-grey-levels"
+            viewBox="0 0 10 10" refX="8" refY="5"
+            [attr.markerWidth]="6 * zoomLevel()"
+            [attr.markerHeight]="6 * zoomLevel()"
+            orient="auto"
+          >
+            <path d="M 3 0 L 7 5 L 3 10" fill="none" stroke-width="2" stroke="#ced4da"></path>
+          </marker>
+          <marker
+            id="arrow-green-levels"
+            viewBox="0 0 10 10" refX="8" refY="5"
+            [attr.markerWidth]="6 * zoomLevel()"
+            [attr.markerHeight]="6 * zoomLevel()"
+            orient="auto"
+          >
+            <path d="M 3 0 L 7 5 L 3 10" fill="none" stroke-width="2" stroke="green"></path>
+          </marker>
+          <marker
+            id="arrow-red-levels"
+            viewBox="0 0 10 10" refX="8" refY="5"
+            [attr.markerWidth]="6 * zoomLevel()"
+            [attr.markerHeight]="6 * zoomLevel()"
+            orient="auto"
+          >
+            <path d="M 3 0 L 7 5 L 3 10" fill="none" stroke-width="2" stroke="#d32f2f"></path>
+          </marker>
+        </defs>
+
+        @if (!isDragging()) {
+          <!-- Inactive paths (bottom layer) -->
+          @for (line of connections(); track $index) {
+            @if (!line.active && !line.invalid) {
+              <path
+                [attr.d]="line.path"
+                stroke="#ced4da"
+                [attr.stroke-width]="2 * zoomLevel()"
+                fill="none"
+                marker-end="url(#arrow-grey-levels)"
+              />
+            }
+          }
+          <!-- Active / invalid paths (top layer) -->
+          @for (line of connections(); track $index) {
+            @if (line.active || line.invalid) {
+              <path
+                [attr.d]="line.path"
+                [attr.stroke]="line.invalid ? '#d32f2f' : 'green'"
+                [attr.stroke-width]="2 * zoomLevel()"
+                fill="none"
+                [attr.marker-end]="line.invalid ? 'url(#arrow-red-levels)' : 'url(#arrow-green-levels)'"
+              />
+            }
+          }
+        }
+      </svg>
+
+      <!-- Columns -->
+      <div class="levels-container" [style.transform]="'scale(' + zoomLevel() + ')'">
+
+        @for (col of columns(); track $index; let i = $index) {
+          <div class="column-container">
+            <div class="column-header">
+              <span class="level-number">{{ i + 1 }}</span>
+            </div>
+
+            <div
+              cdkDropList
+              class="drop-list"
+              [cdkDropListData]="{ parentId: i === 0 ? null : selectedIds()[i - 1], index: i }"
+              [cdkDropListEnterPredicate]="canEnterColumn"
+              (cdkDropListDropped)="onDropInColumn($any($event))"
+            >
+              @if (!col.length) {
+                <button class="add-btn">+ Add</button>
+              }
+
+              @for (item of col; track getItemId(item)) {
+                @let it = $any(item);
+
+                <div
+                  #itemRef
+                  cdkDrag
+                  [cdkDragData]="item"
+                  [attr.data-level]="i"
+                  [attr.data-id]="getItemId(item)"
+                  [attr.data-type]="isNode(item) ? 'folder' : isImage(item) ? 'image' : 'table'"
+                  [title]="
+                    it.assemblyName || it.drawingName || it.imageNameAsInPDF ||
+                    it.tableNameAsInPDF || it.tableName
+                  "
+                  (cdkDragStarted)="isDragging.set(true)"
+                  (cdkDragEnded)="isDragging.set(false); invalidHoverId.set(null)"
+                  class="draggable-item"
+                  [class.folder]="isNode(item)"
+                  [class.active]="isSelected(item, i)"
+                  [class.complete-pair]="(isImage(item) || isTable(item)) && $any(item).isPaired"
+                  [class.error-item]="(isImage(item) || isTable(item)) && !$any(item).isPaired"
+                  [class.invalid-drop]="invalidHoverId() === getItemId(item)"
+                  (click)="selectItem(item, i)"
+                >
+                  <div class="item-content" [style.align-items]="isTable(item) ? 'flex-start' : 'center'">
+
+                    <!-- ── FOLDER / NODE ── -->
+                    @if (isNode(item)) {
+                      <span class="item-text" [title]="it.assemblyName?.replaceAll('_', ' ')">{{
+                        it.assemblyName?.replaceAll('_', ' ')
+                      }}</span>
+                      <div class="action-buttons">
+                        <button
+                          class="edit-btn"
+                          (click)="openEditPanel(it); $event.stopPropagation()"
+                          title="Edit assembly"
+                        >
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                          </svg>
+                        </button>
+                      </div>
+                      <span class="drag-handle" title="Drag to reorder">⋮⋮</span>
+                    }
+
+                    <!-- ── IMAGE (paired or pending) ── -->
+                    @else if (isImage(item)) {
+                      <div style="display: flex; flex-direction: column; width: 100%;">
+                        <span class="item-text" [title]="(it.imageNameAsInPDF || it.drawingName).replaceAll('_',' ')">
+                          {{ (it.imageNameAsInPDF || it.drawingName).replaceAll('_', ' ') }}
+                        </span>
+                        @if (!it.isPaired) {
+                          <span class="pending-hint">⚠ needs table</span>
+                        }
+                      </div>
+                      <div class="action-buttons">
+                        <button class="edit-btn" (click)="$event.stopPropagation()" title="Edit image">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                          </svg>
+                        </button>
+                        <!-- <button class="edit-btn" (click)="removeImageFromColumn(it, i); $event.stopPropagation()" title="Remove image">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                          </svg>
+                        </button> -->
+                      </div>
+                    }
+
+                    <!-- ── TABLE (paired or pending) ── -->
+                    @else if (isTable(item)) {
+                      <div class="table-item-wrapper">
+                        <div class="table-title">
+                          <span>{{ it.tableNameAsInPDF?.replaceAll('_', ' ') || it.tableName }}</span>
+                          <div class="action-buttons" style="opacity: 1;">
+                            <button class="edit-btn" (click)="$event.stopPropagation()" title="Edit table">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                              </svg>
+                            </button>
+                            <!-- <button class="edit-btn" (click)="removeTableFromColumn(it, i); $event.stopPropagation()" title="Remove table">
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                              </svg>
+                            </button> -->
+                          </div>
+                        </div>
+                        @if (!it.isPaired) {
+                          <div class="pending-hint">⚠ needs image</div>
+                        }
+                        @if (it.tables?.[0]?.tableData?.length > 0) {
+                          <table class="data-table">
+                            <thead>
+                              <tr>
+                                @for (h of it.tables[0].tableData[0]; track $index) {
+                                  <th [title]="h">{{ h }}</th>
+                                }
+                              </tr>
+                            </thead>
+                            <tbody>
+                              @for (row of it.tables[0].tableData.slice(1, 3); track $index) {
+                                <tr class="data-row">
+                                  @for (cell of row; track $index) {
+                                    <td [title]="cell">{{ cell }}</td>
+                                  }
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        }
+                      </div>
+                    }
+
+                  </div>
+                </div>
+              }
+
+              <!-- Add menu -->
+              <div class="add-icon-container">
+                <button class="plus-icon-btn">
+                  <span>+</span>
+                </button>
+                <div class="add-menu">
+                  @if (i === 0) {
+                    <button
+                      (click)="openAddPanel(null, i, 'assembly'); $event.stopPropagation()"
+                      class="menu-item"
+                    >
+                      Add Assembly
+                    </button>
+                    @if (selectedIds()[i]) {
+                      <button
+                        (click)="openAddPanel(selectedIds()[i], i, 'sub-assembly'); $event.stopPropagation()"
+                        class="menu-item"
+                      >
+                        Add Sub Assembly
+                      </button>
+                    }
+                  } @else {
+                    <button
+                      (click)="openAddPanel(selectedIds()[i - 1], i, 'sub-assembly'); $event.stopPropagation()"
+                      class="menu-item"
+                    >
+                      Add Sub Assembly
+                    </button>
+                  }
+                </div>
+              </div>
+
+            </div>
+          </div>
+        }
+
+      </div>
+    </div>
+
+    <!-- Zoom Controls -->
+    <div class="zoom-controls">
+      <button class="zoom-btn" (click)="zoomOut()" [disabled]="zoomLevel() <= minZoom" title="Zoom Out">−</button>
+      <span class="zoom-label">{{ (zoomLevel() * 100).toFixed(0) }}%</span>
+      <button class="zoom-btn" (click)="zoomIn()" [disabled]="zoomLevel() >= maxZoom" title="Zoom In">+</button>
+      <button class="zoom-btn" (click)="resetZoom()" title="Reset Zoom">⟲</button>
+    </div>
+  </div>
+
+  <!-- ═══════════ RIGHT PANEL ═══════════ -->
+  @if (rightPanelOpen()) {
+    <div class="right-panel-overlay" (click)="closeRightPanel()"></div>
+    <div class="right-panel">
+      <div class="panel-header">
+        <h3>
+          {{ rightPanelMode() === 'add' ? 'Add ' : 'Edit '
+          }}{{ rightPanelFor() === 'assembly' ? 'Assembly' : 'Sub Assembly' }}
+        </h3>
+        <button class="close-btn" (click)="closeRightPanel()">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+
+      <div class="panel-body">
+        <div class="form-group">
+          <label>
+            {{ rightPanelFor() === 'assembly' ? 'Assembly' : 'Sub Assembly' }} Name
+            <span style="color: brown">*</span>
+          </label>
+          <input
+            type="text"
+            [(ngModel)]="assemblyForm.assemblyName"
+            (ngModelChange)="onNameChange($event)"
+            [placeholder]="rightPanelFor() === 'assembly' ? 'Enter Assembly Name' : 'Enter Sub Assembly Name'"
+            class="form-input"
+          />
+        </div>
+        <div class="form-group">
+          <label>Class Code</label>
+          <input type="text" disabled [(ngModel)]="assemblyForm.classCode" class="form-input" />
+        </div>
+        <div class="form-group">
+          <label>Parent Class Code</label>
+          <input type="text" disabled [(ngModel)]="assemblyForm.parentClassCode" class="form-input" />
+        </div>
+      </div>
+
+      <div class="panel-footer">
+        @if (formErrorMessage) {
+          <div style="color: brown; flex: 1;">{{ formErrorMessage }}</div>
+        }
+        <button class="btn-cancel" (click)="closeRightPanel()">Cancel</button>
+        <button class="btn-submit" (click)="submitForm()" [disabled]="!assemblyForm.isValid">
+          {{ rightPanelMode() === 'add' ? 'Add' : 'Update' }}
+        </button>
+      </div>
+    </div>
+  }
+
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  <button
+    class="partable-btn primary"
+    [disabled]="disableSave()"
+    (click)="saveHierarchy()"
+    [title]="disableSave() ? 'Complete all pending image-table pairs before saving' : 'Save'"
+  >
+    Save Hierarchy
+  </button>
+</div>
