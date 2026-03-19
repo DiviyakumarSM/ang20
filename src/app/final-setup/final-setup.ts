@@ -704,14 +704,17 @@ export class FinalSetup implements OnInit {
   }
 
   private fillAssemblyFromImage(image: Model.IImageListItem, assembly: Model.IAssemblyItem): void {
+    const drawingName = assembly.prespectiveName
+      ? `${assembly.productId}_${assembly.prespectiveName}`
+      : assembly.productId;
     assembly.extractedImgId = image.extractedImgId;
     assembly.extractedImgVersion = image.extractedImgVersion;
     assembly.pageId = image.pageId;
-    assembly.drawingName = image.drawingName;
+    assembly.drawingName = drawingName;
     assembly.imageNameAsInPDF = image.imageNameAsInPDF || image.drawingName;
-    assembly.svgFileName = image.svgFileName || '';
+    assembly.svgFileName = `${drawingName}.svg`;
     assembly.svgFileId = image.svgFileId ?? '';
-    assembly.svgHeader = image.svgHeader || '';
+    assembly.svgHeader = this.replaceSvgDrawingName(image.svgHeader || '', image.drawingName, drawingName);
     assembly.hotspotDetails = image.hotspotDetails;
     assembly.imageUrl = image.imageUrl;
     assembly.originalImgId = '';
@@ -944,6 +947,9 @@ export class FinalSetup implements OnInit {
     const firstTable = table.tables[0];
     const productId = node.hierarchyId;
     const prespectiveName = this.generatePrespectiveName(node);
+    const drawingName = prespectiveName ? `${productId}_${prespectiveName}` : productId;
+    const svgFileName = `${drawingName}.svg`;
+    const svgHeader = this.replaceSvgDrawingName(image.svgHeader || '', image.drawingName, drawingName);
     return {
       assemblyId: uuidv4(),
       tableListItemId: table.tableId,
@@ -952,12 +958,12 @@ export class FinalSetup implements OnInit {
       selectedImageIndex: 0,
       productId,
       pageId: image.pageId,
-      drawingName: image.drawingName,
+      drawingName,
       imageNameAsInPDF: image.imageNameAsInPDF || image.drawingName,
       prespectiveName,
       svgFileId: image.svgFileId ?? '',
-      svgFileName: image.svgFileName || '',
-      svgHeader: image.svgHeader || '',
+      svgFileName,
+      svgHeader,
       imageUrl: image.imageUrl,
       hotspotDetails: image.hotspotDetails,
       originalImgId: '',
@@ -989,6 +995,12 @@ export class FinalSetup implements OnInit {
       },
       status: 'pending',
     };
+  }
+
+  /** Replace every occurrence of oldName in svgHeader with newName */
+  private replaceSvgDrawingName(svgHeader: string, oldName: string, newName: string): string {
+    if (!oldName || oldName === newName) return svgHeader;
+    return svgHeader.split(oldName).join(newName);
   }
 
   /** Generate next unique prespectiveName (View A, View B, …) for a new assembly in the node */
