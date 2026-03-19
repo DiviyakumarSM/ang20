@@ -231,6 +231,7 @@ export class FinalSetup implements OnInit {
       svgFileName: assembly.svgFileName,
       svgFileId: assembly.svgFileId || null,
       assemblyIdRef: assembly.assemblyId,
+      imageUrl: assembly.imageUrl,
       isPaired: true,
     };
   }

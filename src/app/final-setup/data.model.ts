@@ -85,6 +85,7 @@ export interface IAssemblyItem {
   drawingName: string;
   status: string;
   hotspotDetails: IHotspotDetail[];
+  imageUrl?: string;
 
   mergedProductTable: string[][];
   extractedImageListByPage: IExtractedImageByPage[];
@@ -135,6 +136,7 @@ export interface IImageListItem {
   selected?: boolean;
   /** Runtime: true when this image is paired with a table in an IAssemblyItem */
   isPaired?: boolean;
+  imageUrl?: string;
 }
 
 export interface ITableEntry {

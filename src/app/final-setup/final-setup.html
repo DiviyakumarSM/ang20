@@ -225,15 +225,15 @@
 
                     <!-- ── IMAGE (paired or pending) ── -->
                     @else if (isImage(item)) {
-                      <div style="display: flex; flex-direction: column; width: 100%;">
-                        <span class="item-text" [title]="(it.imageNameAsInPDF || it.drawingName).replaceAll('_',' ')">
+                   <div style="display: flex; flex-direction: column; width: 100%;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                           <span class="item-text" [title]="(it.imageNameAsInPDF || it.drawingName).replaceAll('_',' ')">
                           {{ (it.imageNameAsInPDF || it.drawingName).replaceAll('_', ' ') }}
                         </span>
                         @if (!it.isPaired) {
                           <span class="pending-hint">⚠ needs table</span>
                         }
-                      </div>
-                      <div class="action-buttons">
+                        <span class="action-buttons">
                         <button class="edit-btn" (click)="$event.stopPropagation()" title="Edit image">
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -246,6 +246,12 @@
                             <line x1="6" y1="6" x2="18" y2="18"></line>
                           </svg>
                         </button> -->
+                        </span>
+                        </div>
+                         <div
+                          class="bg-img-cont"
+                          [ngStyle]="{ 'background-image': 'url(' + it.imageUrl + ')' }"
+                      ></div>
                       </div>
                     }
 
