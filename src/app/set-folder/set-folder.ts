@@ -39,11 +39,12 @@ interface INodeRuntime extends Model.INode {
  */
 interface ITableRuntime extends Model.ITable {
   tableId: string; // guaranteed non-nullable at runtime
-  assemblyExtractedImgId: string; // parent IAssembly.extractedImgId
-  pageKey: string; // key in IAssembly.linkedPageProductTable
+  assemblyExtractedImgId: string; // parent IAssembly.extractedImgId; empty for tableList tables
+  pageKey: string; // key in IAssembly.linkedPageProductTable; equals pageId for tableList tables
   pageId: string;
   pageName: string;
   selected?: boolean;
+  isPageListTable?: boolean; // true when sourced from assemblyHierarchy.tableList
 }
 
 /** IImage extended with checkbox selection state */
@@ -123,6 +124,11 @@ export class SetFolder implements OnInit, OnChanges {
 
   parentMap = new Map<string, string | null>();
   validationErrors = new Map<string, string>();
+
+  // Tracks inner tableIds that were converted from tableList → linkedPageProductTable
+  private pageListTableIds = new Set<string>();
+  // Stores original IPageTable metadata for each converted tableId (needed for reverse conversion)
+  private pageListTableMeta = new Map<string, Model.IPageTable>();
 
   // Right panel state
   rightPanelOpen = signal(false);
@@ -267,6 +273,13 @@ export class SetFolder implements OnInit, OnChanges {
         ];
       }
     });
+
+    // Reset all tableList tables to unaccepted on init so they appear in the available panel
+    this.rawFileData.tableList?.forEach((pt: Model.IPageTable) => {
+      pt.tables?.forEach((t: Model.ITable) => {
+        t.isAccepted = false;
+      });
+    });
   }
 
   /* ================= TABLE HELPERS ================= */
@@ -288,7 +301,7 @@ export class SetFolder implements OnInit, OnChanges {
     };
   }
 
-  /** Rebuild availableTables from all ITable entries with isAccepted === false */
+  /** Rebuild availableTables from unaccepted linked tables + unaccepted tableList tables */
   private refreshAvailableTables(): void {
     const tables: ITableRuntime[] = [];
     Object.values(this.rawFileData.nodes).forEach((n: Model.INode) => {
@@ -305,7 +318,30 @@ export class SetFolder implements OnInit, OnChanges {
         });
       });
     });
+    // Also expose unaccepted IPageTable entries from the top-level tableList
+    this.rawFileData.tableList?.forEach((pt: Model.IPageTable) => {
+      pt.tables?.forEach((table: Model.ITable) => {
+        if (!table.isAccepted && table.tableId) {
+          tables.push({
+            ...table,
+            tableId: table.tableId!,
+            assemblyExtractedImgId: '', // no parent assembly yet
+            pageKey: pt.pageId,         // used as key in linkedPageProductTable on drop
+            pageId: pt.pageId,
+            pageName: pt.pageName,
+            isPageListTable: true,
+          });
+        }
+      });
+    });
     this.availableTables.set(tables);
+  }
+
+  /** Find the IPageTable in tableList that owns the given inner tableId */
+  private findPageTableByTableId(tableId: string): Model.IPageTable | undefined {
+    return this.rawFileData.tableList?.find((pt) =>
+      pt.tables?.some((t) => t.tableId === tableId),
+    );
   }
 
   /** Collect all ITableRuntime with isAccepted === true for a given node */
@@ -342,8 +378,13 @@ export class SetFolder implements OnInit, OnChanges {
   }
 
   /**
-   * Toggle isAccepted on the ITable that lives inside an assembly's linkedPageProductTable.
-   * This is the single mutation point for accepting/rejecting a table.
+   * Toggle isAccepted and handle IPageTable ↔ IAssembly.linkedPageProductTable conversion.
+   *
+   * • assemblyExtractedImgId === '' → tableList table being ACCEPTED into a node:
+   *     converts IPageTable → ILinkedPageTable entry in assembly[0], removes from tableList.
+   * • assemblyExtractedImgId set + pageListTableIds.has(tableId) → REJECTING a converted table:
+   *     reconstructs IPageTable and restores it to tableList, removes from linkedPageProductTable.
+   * • Otherwise → standard toggle on a normal linked table.
    */
   private setTableAccepted(
     tableId: string,
@@ -352,6 +393,76 @@ export class SetFolder implements OnInit, OnChanges {
     node: INodeRuntime,
     accepted: boolean,
   ): void {
+    // ── ACCEPT: tableList table dropped into a node ──────────────────────────
+    if (!assemblyExtractedImgId) {
+      const parentPt = this.findPageTableByTableId(tableId);
+      if (!parentPt) return;
+      const assembly = node.assemblyList?.[0];
+      if (!assembly) return;
+      if (!assembly.linkedPageProductTable) assembly.linkedPageProductTable = {};
+      const lpKey = parentPt.pageId;
+      // Convert IPageTable → ILinkedPageTable (all inner tables accepted)
+      assembly.linkedPageProductTable[lpKey] = {
+        tables: parentPt.tables.map((t) => ({ ...t, isAccepted: true })),
+        pageKey: lpKey,
+        pageId: parentPt.pageId,
+        pageName: parentPt.pageName,
+      };
+      // Track origin for reverse conversion
+      parentPt.tables?.forEach((t) => {
+        if (t.tableId) {
+          this.pageListTableIds.add(t.tableId);
+          this.pageListTableMeta.set(t.tableId, parentPt);
+        }
+      });
+      // Add any sibling table IDs from the same page to itemOrder
+      const extraIds = (parentPt.tables ?? [])
+        .map((t) => t.tableId!)
+        .filter((id) => id && id !== tableId && !node.itemOrder.includes(id));
+      node.itemOrder = [...node.itemOrder, ...extraIds];
+      // Remove from tableList
+      this.rawFileData.tableList = (this.rawFileData.tableList ?? []).filter(
+        (pt) => pt.pageId !== parentPt.pageId,
+      );
+      return;
+    }
+
+    // ── REJECT: converted tableList table removed from a node ────────────────
+    if (!accepted && this.pageListTableIds.has(tableId)) {
+      const assembly = node.assemblyList?.find(
+        (a: Model.IAssembly) => a.extractedImgId === assemblyExtractedImgId,
+      );
+      const linkedPage = assembly?.linkedPageProductTable?.[pageKey];
+      if (linkedPage) {
+        const meta = this.pageListTableMeta.get(tableId);
+        // Reconstruct IPageTable, restoring original metadata
+        const restoredPt: Model.IPageTable = {
+          ...(meta ?? ({} as Model.IPageTable)),
+          tables: linkedPage.tables.map((t) => ({ ...t, isAccepted: false })),
+          pageId: linkedPage.pageId,
+          pageName: linkedPage.pageName,
+          pageNo: meta?.pageNo ?? pageKey,
+          tableId,
+          type: 'table',
+          order: meta?.order ?? 0,
+        };
+        if (!(this.rawFileData.tableList ?? []).some((pt) => pt.pageId === linkedPage.pageId)) {
+          this.rawFileData.tableList = [...(this.rawFileData.tableList ?? []), restoredPt];
+        }
+        delete assembly!.linkedPageProductTable![pageKey];
+        // Clean up all sibling table IDs from itemOrder and tracking maps
+        linkedPage.tables?.forEach((t) => {
+          if (t.tableId) {
+            node.itemOrder = node.itemOrder?.filter((id) => id !== t.tableId) ?? [];
+            this.pageListTableIds.delete(t.tableId);
+            this.pageListTableMeta.delete(t.tableId);
+          }
+        });
+      }
+      return;
+    }
+
+    // ── Standard toggle for normal linked tables ─────────────────────────────
     const assembly = node.assemblyList?.find(
       (a: Model.IAssembly) => a.extractedImgId === assemblyExtractedImgId,
     );
@@ -434,15 +545,23 @@ export class SetFolder implements OnInit, OnChanges {
       return false;
     }
 
-    // A table can only be dropped into a node that contains its parent assembly
     if (this.isTableItem(item)) {
       const targetNode = this.asNode(target.parentId);
-      const hasAssembly = targetNode?.assemblyList?.some(
-        (a: Model.IAssembly) => a.extractedImgId === item.assemblyExtractedImgId,
-      );
-      if (!hasAssembly) {
-        this.setInvalidReason(itemId, "Table's parent assembly is not in this node");
-        return false;
+      if (item.isPageListTable) {
+        // tableList table: target node must have at least one assembly to host it
+        if (!targetNode?.assemblyList?.length) {
+          this.setInvalidReason(itemId, 'Add an image to this node before adding a standalone table');
+          return false;
+        }
+      } else {
+        // Linked table: target node must contain its parent assembly
+        const hasAssembly = targetNode?.assemblyList?.some(
+          (a: Model.IAssembly) => a.extractedImgId === item.assemblyExtractedImgId,
+        );
+        if (!hasAssembly) {
+          this.setInvalidReason(itemId, "Table's parent assembly is not in this node");
+          return false;
+        }
       }
     }
 
@@ -1255,14 +1374,55 @@ export class SetFolder implements OnInit, OnChanges {
       Object.entries(
         assembly.linkedPageProductTable ?? ({} as Record<string, Model.ILinkedPageTable>),
       ).forEach(([pageKey, page]: [string, Model.ILinkedPageTable]) => {
-        page.tables?.forEach((table: Model.ITable) => {
-          if (table.tableId) {
-            if (table.isAccepted) {
-              freedTables.push(this.toTableRuntime(table, assembly.extractedImgId, pageKey, page));
-            }
-            table.isAccepted = false;
+        // Check once per page entry whether it was converted from tableList
+        const isPageListEntry = page.tables?.some(
+          (t) => t.tableId && this.pageListTableIds.has(t.tableId),
+        );
+        if (isPageListEntry) {
+          // Restore the whole page back to tableList and expose it in available panel
+          const firstId = page.tables?.find((t) => t.tableId)?.tableId;
+          const meta = firstId ? this.pageListTableMeta.get(firstId) : undefined;
+          const restoredPt: Model.IPageTable = {
+            ...(meta ?? ({} as Model.IPageTable)),
+            tables: page.tables.map((t) => ({ ...t, isAccepted: false })),
+            pageId: page.pageId,
+            pageName: page.pageName,
+            pageNo: meta?.pageNo ?? pageKey,
+            tableId: firstId ?? '',
+            type: 'table',
+            order: meta?.order ?? 0,
+          };
+          if (!(this.rawFileData.tableList ?? []).some((pt) => pt.pageId === page.pageId)) {
+            this.rawFileData.tableList = [...(this.rawFileData.tableList ?? []), restoredPt];
           }
-        });
+          page.tables?.forEach((t) => {
+            if (t.tableId) {
+              // Expose immediately as an available item
+              freedTables.push({
+                ...t,
+                tableId: t.tableId!,
+                assemblyExtractedImgId: '',
+                pageKey: page.pageId,
+                pageId: page.pageId,
+                pageName: page.pageName,
+                isPageListTable: true,
+              });
+              this.pageListTableIds.delete(t.tableId);
+              this.pageListTableMeta.delete(t.tableId);
+            }
+          });
+        } else {
+          page.tables?.forEach((table: Model.ITable) => {
+            if (table.tableId) {
+              if (table.isAccepted) {
+                freedTables.push(
+                  this.toTableRuntime(table, assembly.extractedImgId, pageKey, page),
+                );
+              }
+              table.isAccepted = false;
+            }
+          });
+        }
       });
     });
     if (freedTables.length) {

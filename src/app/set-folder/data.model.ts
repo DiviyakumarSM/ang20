@@ -24,6 +24,7 @@ export interface INode {
   childIds: string[];
   hierarchyId: string;
   assemblyList: IAssembly[];
+  partsList?: any[];
 }
 
 export interface IAssembly {
@@ -33,13 +34,13 @@ export interface IAssembly {
   assemblyId: string;
   originalImgVersion: number;
   classCodeInfo: IClassCodeInfo;
-  prespectiveName: string;
+  prespectiveName: string | null;
   pageId: string;
-  svgFileId: string;
+  svgFileId: string | null;
   assemblyStatus: string;
   svgFileVersion?: number;
-  svgFileName?: string;
-  svgHeader?: string;
+  svgFileName?: string | null;
+  svgHeader?: string | null;
   userSave: boolean;
   pdsInfo: IPdsInfo;
   extractedImgId: string;
@@ -106,6 +107,8 @@ export interface IPageTable {
   type: string;
   pageId: string;
   pageName: string;
+  tableNameAsInPDF?: string;
+  tableName?: string;
   order: number;
 }
 

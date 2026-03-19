@@ -1,4 +1,4 @@
-import { IResponse } from './assembly-model';
+import { IResponse } from './data.model';
 
 export const mockResponse: IResponse = {
   statusCode: 200,
@@ -1435,11 +1435,11 @@ export const mockResponse: IResponse = {
                 ['54 (1371.6)', 'D-AP115-5404', 'D-AP115-5405', 'D-AP115-5402'],
                 ['60 (1524)', 'D-AP115-5404', 'D-AP115-6005', 'D-AP115-6002'],
                 ['66 (1676.4)', 'D-AP115-6610', 'D-AP115-6610', 'D-AP115-6002'],
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  }
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  },
 };
