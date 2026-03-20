@@ -1441,7 +1441,7 @@ export class DrillerComponent implements OnInit, OnChanges {
       if (productIdIndex !== -1 && hotSpotIdIndex !== -1) {
         let hotSpotArray: AssemblyModel.IHotspotDetail[] | null = hotspotDetails || [];
         if (hotSpotArray?.length > 0) {
-          return hotSpotArray?.map((item: any) => {
+          return hotSpotArray?.flatMap((item: any) => {
             const hotspotId = item.hotspotString;
             const result = extractedProductTable?.filter((row: any) => {
               const extractedHotspotId = row[hotSpotIdIndex];
@@ -1453,27 +1453,32 @@ export class DrillerComponent implements OnInit, OnChanges {
               );
             });
             if (result && result?.length > 0) {
-              const [extractedProduct] = result;
-              // const [ , extractedQty, extractedProductId ] = extractedProduct;
-              if (!/^\d+$/.test(extractedProduct?.[qtyIndex]?.toString())) {
-                extractedProduct[qtyIndex] = '0';
-              }
-              const extractedQty = extractedProduct[qtyIndex] || '0';
-              const extractedProductId = extractedProduct[productIdIndex] || '';
-              item.qty = extractedQty;
-              item.partId =
-                productIdIndex > -1
-                  ? extractedProductId && item?.duplicated
-                    ? item.partId
-                    : extractedProductId
-                  : '';
-              return item;
+              // Map over all matched rows so the same hotspotString with multiple partIds
+              // produces one entry per partId, each preserving the original hotspotCoords.
+              return result.map((extractedProduct: any) => {
+                // const [ , extractedQty, extractedProductId ] = extractedProduct;
+                const qtyRaw = extractedProduct?.[qtyIndex]?.toString();
+                const extractedQty = !/^\d+$/.test(qtyRaw) ? '0' : qtyRaw || '0';
+                const extractedProductId = extractedProduct[productIdIndex] || '';
+                return {
+                  ...item,
+                  qty: extractedQty,
+                  partId:
+                    productIdIndex > -1
+                      ? extractedProductId && item?.duplicated
+                        ? item.partId
+                        : extractedProductId
+                      : '',
+                };
+              });
             } else {
-              return {
-                ...item,
-                partId: '',
-                qty: '0',
-              };
+              return [
+                {
+                  ...item,
+                  partId: '',
+                  qty: '0',
+                },
+              ];
             }
           });
         } else {

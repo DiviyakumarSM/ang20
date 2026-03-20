@@ -209,6 +209,7 @@
                 <div
                   #itemRef
                   cdkDrag
+                  [cdkDragDisabled]="!isNode(item)"
                   [cdkDragData]="item"
                   [attr.data-level]="i"
                   [attr.data-id]="getItemId(item)"

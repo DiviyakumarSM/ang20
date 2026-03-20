@@ -170,6 +170,8 @@ export interface ITableListItem {
   isPaired?: boolean;
   /** Runtime: linkedPageProductTable grouped by page — used for column display */
   pageGroups?: Array<{ pageName: string; pageKey: string; tables: IPageTable[] }>;
+  /** Runtime: assemblyId this item was split from (set when created via splitTablesFromAssembly) */
+  assemblyIdRef?: string;
 }
 
 export interface IAssemblyHierarchy {

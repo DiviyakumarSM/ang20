@@ -157,24 +157,71 @@ export class FinalSetup implements OnInit {
       if (!node.tableSlots) node.tableSlots = {};
 
       if (!node.itemOrder) {
-        const usedTableIds = new Set<string>();
         node.itemOrder = [...node.childIds];
         node.assemblyList.forEach((a) => {
-          node.itemOrder.push(a.extractedImgId);
-          const tid = a.tableListItemId ?? a.assemblyId;
-          if (!usedTableIds.has(tid)) {
-            usedTableIds.add(tid);
-            node.itemOrder.push(tid);
-            // Seed tableSlots from existing assembly data
-            const tbl = this.tableFromAssembly(a);
-            if (tbl) node.tableSlots[tid] = tbl;
-          }
+          // Image slot
+          if (a.extractedImgId) node.itemOrder.push(a.extractedImgId);
+          // Each table entry in this assembly becomes its own draggable slot
+          this.splitTablesFromAssembly(a).forEach((tbl) => {
+            if (!node.tableSlots[tbl.tableId]) {
+              node.tableSlots[tbl.tableId] = tbl;
+              node.itemOrder.push(tbl.tableId);
+            }
+          });
         });
       }
     });
   }
 
   /* ================= TABLE HELPERS ================= */
+
+  /**
+   * Split an assembly's linkedPageProductTable into one ITableListItem per ITableEntry.
+   * Each item has assemblyIdRef set so remove/move can patch the source assembly.
+   */
+  private splitTablesFromAssembly(assembly: Model.IAssemblyItem): Model.ITableListItem[] {
+    const result: Model.ITableListItem[] = [];
+    for (const [pageKey, page] of Object.entries(assembly.linkedPageProductTable ?? {})) {
+      for (const tableEntry of page.tables) {
+        if (!tableEntry.tableData?.length) continue;
+        const splitId = `${assembly.assemblyId}__${pageKey}__${tableEntry.order}`;
+        result.push({
+          tableId: splitId,
+          pageName: page.pageName,
+          pageId: page.pageId,
+          pageNo: page.pageKey,
+          type: 'table',
+          order: tableEntry.order,
+          tableNameAsInPDF: tableEntry.tableNameAsInPDF ?? '',
+          tableName: tableEntry.tableName,
+          tables: [{ ...tableEntry, tableId: splitId }],
+          assemblyIdRef: assembly.assemblyId,
+        });
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Remove a single split table entry from its source assembly's linkedPageProductTable.
+   * If the page becomes empty, remove the page key; if no pages remain, clear table fields.
+   */
+  private removeTableEntryFromAssembly(
+    node: Model.IHierarchyNodeRuntime,
+    slotTable: Model.ITableListItem,
+  ): void {
+    const assembly = node.assemblyList.find((a) => a.assemblyId === slotTable.assemblyIdRef);
+    if (!assembly) return;
+    const page = assembly.linkedPageProductTable?.[slotTable.pageNo];
+    if (!page) return;
+    page.tables = page.tables.filter((t) => t.order !== slotTable.order);
+    if (page.tables.length === 0) delete assembly.linkedPageProductTable[slotTable.pageNo];
+    if (Object.keys(assembly.linkedPageProductTable ?? {}).length === 0) {
+      assembly.linkedPageProductTable = {};
+      assembly.mergedProductTable = [];
+      assembly.tableListItemId = undefined;
+    }
+  }
 
   private refreshAvailableTables(): void {
     const usedIds = new Set<string>();
@@ -815,7 +862,7 @@ export class FinalSetup implements OnInit {
       return;
     }
 
-    // Paired table — restore from tableSlots, clear assemblies, remove from slot
+    // Paired table — restore from tableSlots, clear from assembly, remove from slot
     const slotTable = node.tableSlots?.[tableKey];
     if (!slotTable) return;
 
@@ -828,13 +875,18 @@ export class FinalSetup implements OnInit {
     if (node.tableSlots) delete node.tableSlots[tableKey];
     node.itemOrder = node.itemOrder.filter((id) => id !== tableKey);
 
-    node.assemblyList
-      .filter((a) => (a.tableListItemId ?? a.assemblyId) === tableKey)
-      .forEach((a) => {
-        a.linkedPageProductTable = {};
-        a.mergedProductTable = [];
-        a.tableListItemId = undefined;
-      });
+    if (slotTable.assemblyIdRef) {
+      // Split table — remove only this entry from its source assembly
+      this.removeTableEntryFromAssembly(node, slotTable);
+    } else {
+      node.assemblyList
+        .filter((a) => (a.tableListItemId ?? a.assemblyId) === tableKey)
+        .forEach((a) => {
+          a.linkedPageProductTable = {};
+          a.mergedProductTable = [];
+          a.tableListItemId = undefined;
+        });
+    }
 
     this.emitChange(parentId, 'REMOVE_TABLE');
     this.refreshView();
@@ -925,17 +977,21 @@ export class FinalSetup implements OnInit {
 
     // Get the canonical table object from tableSlots before clearing
     const tableToMove = fromNode.tableSlots?.[tableKey] ?? table;
-    // Remove from tableSlots and itemOrder
     if (fromNode.tableSlots) delete fromNode.tableSlots[tableKey];
     fromNode.itemOrder = fromNode.itemOrder.filter((id) => id !== tableKey);
-    // Null out table fields on all assemblies that referenced this table
-    fromNode.assemblyList
-      .filter((a) => (a.tableListItemId ?? a.assemblyId) === tableKey)
-      .forEach((a) => {
-        a.linkedPageProductTable = {};
-        a.mergedProductTable = [];
-        a.tableListItemId = undefined;
-      });
+
+    if (tableToMove.assemblyIdRef) {
+      // Split table — remove only this entry from its source assembly
+      this.removeTableEntryFromAssembly(fromNode, tableToMove);
+    } else {
+      fromNode.assemblyList
+        .filter((a) => (a.tableListItemId ?? a.assemblyId) === tableKey)
+        .forEach((a) => {
+          a.linkedPageProductTable = {};
+          a.mergedProductTable = [];
+          a.tableListItemId = undefined;
+        });
+    }
     this.pairTableWithNode(tableToMove, toNode);
   }
 
