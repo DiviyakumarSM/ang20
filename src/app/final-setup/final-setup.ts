@@ -654,12 +654,18 @@ export class FinalSetup implements OnInit {
    * Called by handleImageDrop (from available panel) and moveImageBetweenNodes (cross-node).
    */
   private pairImageWithNode(image: Model.IImageListItem, node: Model.IHierarchyNodeRuntime): void {
-    // Re-fill a table-only assembly (image slot was previously cleared)
+    // Existing table-only assembly — create a new assembly with its table details
     const tableOnlyAssembly = node.assemblyList.find(
       (a) => !a.extractedImgId && Object.keys(a.linkedPageProductTable ?? {}).length > 0,
     );
     if (tableOnlyAssembly) {
-      this.fillAssemblyFromImage(image, tableOnlyAssembly);
+      const virtualTable = this.tableFromAssembly(tableOnlyAssembly);
+      if (virtualTable) {
+        const assembly = this.createAssemblyItem(image, virtualTable, node);
+        node.assemblyList.push(assembly);
+      } else {
+        this.fillAssemblyFromImage(image, tableOnlyAssembly);
+      }
       node.itemOrder.push(image.extractedImgId);
       return;
     }
@@ -736,12 +742,10 @@ export class FinalSetup implements OnInit {
       return;
     }
 
-    // 3. Create a parallel assembly reusing the primary image (1 image + N tables use case)
+    // 3. Update the existing assembly's table keys (do NOT create a new assembly)
     const primaryAssembly = node.assemblyList.find((a) => !!a.extractedImgId);
     if (primaryAssembly) {
-      const imageRef = this.imageFromAssembly(primaryAssembly);
-      const newAssembly = this.createAssemblyItem(imageRef, table, node);
-      node.assemblyList.push(newAssembly);
+      this.fillAssemblyFromTable(table, primaryAssembly);
       // extractedImgId is already in itemOrder — do NOT push it again
       return;
     }
