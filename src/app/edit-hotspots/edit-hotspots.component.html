@@ -1,0 +1,160 @@
+<h2 mat-dialog-title>Edit Hotspots</h2>
+
+<mat-dialog-content>
+  <div class="layout">
+
+    <!-- ── Left: Image Canvas ── -->
+    <div class="canvas-panel">
+      @if (!imageLoaded()) {
+        <div class="canvas-loading">Loading image…</div>
+      }
+
+      <div class="canvas-scroll-area" [class.hidden]="!imageLoaded()">
+        <div class="canvas-container">
+          <canvas #imageCanvas></canvas>
+          <canvas
+            #overlayCanvas
+            class="canvas-overlay"
+            [style.cursor]="isDrawingMode() ? 'crosshair' : 'default'"
+            (mousedown)="onCanvasMouseDown($event)"
+            (mousemove)="onCanvasMouseMove($event)"
+            (mouseup)="onCanvasMouseUp($event)"
+            (mouseleave)="onCanvasMouseLeave()"
+          ></canvas>
+        </div>
+      </div>
+
+      @if (isDrawingMode()) {
+        <div class="draw-hint">
+          <mat-icon>edit_location_alt</mat-icon>
+          Drawing coords for row {{ drawingForRow()! + 1 }} — click &amp; drag on the image
+          <button mat-button color="warn" (click)="cancelDrawing()">Cancel</button>
+        </div>
+      }
+    </div>
+
+    <!-- ── Right: Hotspot Table ── -->
+    <div class="table-panel">
+      <div class="table-header">
+        <span>Hotspot Details</span>
+        <button mat-icon-button color="primary" matTooltip="Add row at end" (click)="addRow()">
+          <mat-icon>add</mat-icon>
+        </button>
+      </div>
+
+      <div class="table-scroll" #tableScroll>
+        @if (hotspots().length === 0) {
+          <div class="empty-state">No hotspots yet. Click + to add one.</div>
+        } @else {
+          <table class="hotspot-table">
+            <thead>
+              <tr>
+                <th class="col-seq">#</th>
+                <th class="col-hotspot">Hotspot</th>
+                <th class="col-partid">Part ID</th>
+                <th class="col-desc">Description</th>
+                <th class="col-qty">Qty</th>
+                <th class="col-coords">Coords</th>
+                <th class="col-actions">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (h of hotspots(); track $index; let i = $index) {
+                <tr
+                  [attr.data-row]="i"
+                  [class.row-highlighted]="hoveredRowIndex() === i"
+                  [class.row-drawing]="drawingForRow() === i"
+                  (mouseenter)="onRowHover(i)"
+                  (mouseleave)="onRowLeave()"
+                >
+                  <td class="col-seq">{{ i + 1 }}</td>
+
+                  <td class="col-hotspot">
+                    <input
+                      class="cell-input"
+                      [value]="h.hotspotString"
+                      (input)="updateField(i, 'hotspotString', $any($event.target).value)"
+                    />
+                  </td>
+
+                  <td class="col-partid">
+                    <input
+                      class="cell-input"
+                      [value]="h.partId ?? ''"
+                      placeholder="—"
+                      (input)="updateField(i, 'partId', $any($event.target).value)"
+                    />
+                  </td>
+
+                  <td class="col-desc">
+                    <input
+                      class="cell-input"
+                      [value]="h.partDescription ?? ''"
+                      placeholder="—"
+                      (input)="updateField(i, 'partDescription', $any($event.target).value)"
+                    />
+                  </td>
+
+                  <td class="col-qty">
+                    <input
+                      class="cell-input"
+                      [value]="h.qty ?? ''"
+                      placeholder="—"
+                      (input)="updateField(i, 'qty', $any($event.target).value)"
+                    />
+                  </td>
+
+                  <td class="col-coords">
+                    <span
+                      class="coords-badge"
+                      [class.coords-empty]="!h.hotspotCoords?.length"
+                      [matTooltip]="coordsLabel(h)"
+                    >
+                      {{ coordsLabel(h) }}
+                    </span>
+                  </td>
+
+                  <td class="col-actions">
+                    <button
+                      mat-icon-button
+                      class="action-btn"
+                      matTooltip="Add row after"
+                      (click)="addRowAfter(i)"
+                    >
+                      <mat-icon>add_circle_outline</mat-icon>
+                    </button>
+
+                    <button
+                      mat-icon-button
+                      class="action-btn draw-btn"
+                      [class.draw-btn--active]="drawingForRow() === i"
+                      matTooltip="Draw coordinates on image"
+                      (click)="startDrawCoords(i)"
+                    >
+                      <mat-icon>edit_location_alt</mat-icon>
+                    </button>
+
+                    <button
+                      mat-icon-button
+                      class="action-btn delete-btn"
+                      matTooltip="Delete row"
+                      (click)="deleteRow(i)"
+                    >
+                      <mat-icon>delete_outline</mat-icon>
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </div>
+    </div>
+
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="cancel()">Cancel</button>
+  <button mat-raised-button color="primary" (click)="save()">Save</button>
+</mat-dialog-actions>

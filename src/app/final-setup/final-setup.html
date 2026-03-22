@@ -1,20 +1,40 @@
 <div class="driller-wrapper" cdkDropListGroup>
-
   <!-- ═══════════ VALIDATION PANEL (top-right) ═══════════ -->
   @if (validationErrors().length > 0 && !validationPanelDismissed()) {
     <div class="validation-panel">
       <div class="validation-panel-header">
         <span class="validation-panel-title">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <path
+              d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"
+            />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
           Issues ({{ validationErrors().length }})
         </span>
-        <button class="validation-panel-close" (click)="validationPanelDismissed.set(true)" title="Dismiss">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        <button
+          class="validation-panel-close"
+          (click)="validationPanelDismissed.set(true)"
+          title="Dismiss"
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.5"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         </button>
       </div>
@@ -33,7 +53,6 @@
     </div>
 
     <div class="assets-content">
-
       <!-- Images -->
       <div class="assets-section">
         <div class="section-header">
@@ -45,7 +64,7 @@
           class="assets-list"
           [cdkDropListData]="{ parentId: 'IMAGES', index: -1 }"
           [cdkDropListEnterPredicate]="canEnterImagesPanel"
-          (cdkDropListDropped)="$event"
+          (cdkDropListDropped)="($event)"
         >
           @for (img of availableImages(); track img.extractedImgId) {
             <div
@@ -62,9 +81,7 @@
                 <input type="checkbox" [(ngModel)]="$any(img)['selected']" />
               </label>
               <span class="asset-name">{{
-                img.imageNameAsInPDF
-                  ? img.imageNameAsInPDF.replaceAll('_', ' ')
-                  : img.drawingName
+                img.imageNameAsInPDF ? img.imageNameAsInPDF.replaceAll('_', ' ') : img.drawingName
               }}</span>
               <span class="drag-handle">⋮⋮</span>
             </div>
@@ -86,7 +103,7 @@
           class="assets-list"
           [cdkDropListData]="{ parentId: 'TABLES', index: -1 }"
           [cdkDropListEnterPredicate]="canEnterTablesPanel"
-          (cdkDropListDropped)="$event"
+          (cdkDropListDropped)="($event)"
         >
           @for (tbl of availableTables(); track tbl.tableId) {
             <div
@@ -103,9 +120,7 @@
                 <input type="checkbox" [(ngModel)]="$any(tbl)['selected']" />
               </label>
               <span class="asset-name">{{
-                tbl.tableNameAsInPDF
-                  ? tbl.tableNameAsInPDF.replaceAll('_', ' ')
-                  : tbl.tableName
+                tbl.tableNameAsInPDF ? tbl.tableNameAsInPDF.replaceAll('_', ' ') : tbl.tableName
               }}</span>
               <span class="drag-handle">⋮⋮</span>
             </div>
@@ -115,20 +130,20 @@
           }
         </div>
       </div>
-
     </div>
   </div>
 
   <!-- ═══════════ LEVELS AREA ═══════════ -->
   <div class="levels-outer">
     <div class="levels-area">
-
       <!-- SVG connector layer — same as set-folder -->
       <svg class="levels-connector-layer" style="width: 100%; height: 100%">
         <defs>
           <marker
             id="arrow-grey-levels"
-            viewBox="0 0 10 10" refX="8" refY="5"
+            viewBox="0 0 10 10"
+            refX="8"
+            refY="5"
             [attr.markerWidth]="6 * zoomLevel()"
             [attr.markerHeight]="6 * zoomLevel()"
             orient="auto"
@@ -137,7 +152,9 @@
           </marker>
           <marker
             id="arrow-green-levels"
-            viewBox="0 0 10 10" refX="8" refY="5"
+            viewBox="0 0 10 10"
+            refX="8"
+            refY="5"
             [attr.markerWidth]="6 * zoomLevel()"
             [attr.markerHeight]="6 * zoomLevel()"
             orient="auto"
@@ -146,7 +163,9 @@
           </marker>
           <marker
             id="arrow-red-levels"
-            viewBox="0 0 10 10" refX="8" refY="5"
+            viewBox="0 0 10 10"
+            refX="8"
+            refY="5"
             [attr.markerWidth]="6 * zoomLevel()"
             [attr.markerHeight]="6 * zoomLevel()"
             orient="auto"
@@ -176,7 +195,9 @@
                 [attr.stroke]="line.invalid ? '#d32f2f' : 'green'"
                 [attr.stroke-width]="2 * zoomLevel()"
                 fill="none"
-                [attr.marker-end]="line.invalid ? 'url(#arrow-red-levels)' : 'url(#arrow-green-levels)'"
+                [attr.marker-end]="
+                  line.invalid ? 'url(#arrow-red-levels)' : 'url(#arrow-green-levels)'
+                "
               />
             }
           }
@@ -185,7 +206,6 @@
 
       <!-- Columns -->
       <div class="levels-container" [style.transform]="'scale(' + zoomLevel() + ')'">
-
         @for (col of columns(); track $index; let i = $index) {
           <div class="column-container">
             <div class="column-header">
@@ -215,8 +235,11 @@
                   [attr.data-id]="getItemId(item)"
                   [attr.data-type]="isNode(item) ? 'folder' : isImage(item) ? 'image' : 'table'"
                   [title]="
-                    it.assemblyName || it.drawingName || it.imageNameAsInPDF ||
-                    it.tableNameAsInPDF || it.tableName
+                    it.assemblyName ||
+                    it.drawingName ||
+                    it.imageNameAsInPDF ||
+                    it.tableNameAsInPDF ||
+                    it.tableName
                   "
                   (cdkDragStarted)="isDragging.set(true)"
                   (cdkDragEnded)="isDragging.set(false); invalidHoverId.set(null)"
@@ -228,8 +251,10 @@
                   [class.invalid-drop]="invalidHoverId() === getItemId(item)"
                   (click)="selectItem(item, i)"
                 >
-                  <div class="item-content" [style.align-items]="isTable(item) ? 'flex-start' : 'center'">
-
+                  <div
+                    class="item-content"
+                    [style.align-items]="isTable(item) ? 'flex-start' : 'center'"
+                  >
                     <!-- ── FOLDER / NODE ── -->
                     @if (isNode(item)) {
                       <span class="item-text" [title]="it.assemblyName?.replaceAll('_', ' ')">{{
@@ -241,9 +266,20 @@
                           (click)="openEditPanel(it); $event.stopPropagation()"
                           title="Edit assembly"
                         >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                          <svg
+                            width="16"
+                            height="16"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                          >
+                            <path
+                              d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                            ></path>
+                            <path
+                              d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                            ></path>
                           </svg>
                         </button>
                       </div>
@@ -252,33 +288,53 @@
 
                     <!-- ── IMAGE (paired or pending) ── -->
                     @else if (isImage(item)) {
-                   <div style="display: flex; flex-direction: column; width: 100%;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                           <span class="item-text" [title]="(it.imageNameAsInPDF || it.drawingName).replaceAll('_',' ')">
-                          {{ (it.imageNameAsInPDF || it.drawingName).replaceAll('_', ' ') }}
-                        </span>
-                        @if (!it.isPaired) {
-                          <span class="pending-hint">⚠ needs table</span>
-                        }
-                        <span class="action-buttons">
-                        <button class="edit-btn" (click)="$event.stopPropagation()" title="Edit image">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
-                          </svg>
-                        </button>
-                        <!-- <button class="edit-btn" (click)="removeImageFromColumn(it, i); $event.stopPropagation()" title="Remove image">
+                      <div style="display: flex; flex-direction: column; width: 100%">
+                        <div
+                          style="display: flex; justify-content: space-between; align-items: center"
+                        >
+                          <span
+                            class="item-text"
+                            [title]="(it.imageNameAsInPDF || it.drawingName).replaceAll('_', ' ')"
+                          >
+                            {{ (it.imageNameAsInPDF || it.drawingName).replaceAll('_', ' ') }}
+                          </span>
+                          @if (!it.isPaired) {
+                            <span class="pending-hint">⚠ needs table</span>
+                          }
+                          <span class="action-buttons">
+                            <button
+                              class="edit-btn"
+                              (click)="openHotspot(it, i); $event.stopPropagation()"
+                              title="Edit image"
+                            >
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                              >
+                                <path
+                                  d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                                ></path>
+                                <path
+                                  d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                                ></path>
+                              </svg>
+                            </button>
+                            <!-- <button class="edit-btn" (click)="removeImageFromColumn(it, i); $event.stopPropagation()" title="Remove image">
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="18" y1="6" x2="6" y2="18"></line>
                             <line x1="6" y1="6" x2="18" y2="18"></line>
                           </svg>
                         </button> -->
-                        </span>
+                          </span>
                         </div>
-                         <div
+                        <div
                           class="bg-img-cont"
                           [ngStyle]="{ 'background-image': 'url(' + it.imageUrl + ')' }"
-                      ></div>
+                        ></div>
                       </div>
                     }
 
@@ -286,12 +342,29 @@
                     @else if (isTable(item)) {
                       <div class="table-item-wrapper">
                         <div class="table-title">
-                          <span>{{ it.tableNameAsInPDF?.replaceAll('_', ' ') || it.tableName }}</span>
-                          <div class="action-buttons" style="opacity: 1;">
-                            <button class="edit-btn" (click)="$event.stopPropagation()" title="Edit table">
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                          <span>{{
+                            it.tableNameAsInPDF?.replaceAll('_', ' ') || it.tableName
+                          }}</span>
+                          <div class="action-buttons" style="opacity: 1">
+                            <button
+                              class="edit-btn"
+                              (click)="$event.stopPropagation()"
+                              title="Edit table"
+                            >
+                              <svg
+                                width="16"
+                                height="16"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                              >
+                                <path
+                                  d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                                ></path>
+                                <path
+                                  d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                                ></path>
                               </svg>
                             </button>
                           </div>
@@ -306,7 +379,10 @@
                           @if (tableEntry.tableData?.length > 0) {
                             @if (it.tables.length > 1) {
                               <div class="table-section-label">
-                                {{ tableEntry.tableNameAsInPDF?.replaceAll('_', ' ') || tableEntry.tableName }}
+                                {{
+                                  tableEntry.tableNameAsInPDF?.replaceAll('_', ' ') ||
+                                    tableEntry.tableName
+                                }}
                               </div>
                             }
                             <table class="data-table">
@@ -331,7 +407,6 @@
                         }
                       </div>
                     }
-
                   </div>
                 </div>
               }
@@ -351,7 +426,10 @@
                     </button>
                     @if (selectedIds()[i]) {
                       <button
-                        (click)="openAddPanel(selectedIds()[i], i, 'sub-assembly'); $event.stopPropagation()"
+                        (click)="
+                          openAddPanel(selectedIds()[i], i, 'sub-assembly');
+                          $event.stopPropagation()
+                        "
                         class="menu-item"
                       >
                         Add Sub Assembly
@@ -359,7 +437,10 @@
                     }
                   } @else {
                     <button
-                      (click)="openAddPanel(selectedIds()[i - 1], i, 'sub-assembly'); $event.stopPropagation()"
+                      (click)="
+                        openAddPanel(selectedIds()[i - 1], i, 'sub-assembly');
+                        $event.stopPropagation()
+                      "
                       class="menu-item"
                     >
                       Add Sub Assembly
@@ -367,19 +448,31 @@
                   }
                 </div>
               </div>
-
             </div>
           </div>
         }
-
       </div>
     </div>
 
     <!-- Zoom Controls -->
     <div class="zoom-controls">
-      <button class="zoom-btn" (click)="zoomOut()" [disabled]="zoomLevel() <= minZoom" title="Zoom Out">−</button>
+      <button
+        class="zoom-btn"
+        (click)="zoomOut()"
+        [disabled]="zoomLevel() <= minZoom"
+        title="Zoom Out"
+      >
+        −
+      </button>
       <span class="zoom-label">{{ (zoomLevel() * 100).toFixed(0) }}%</span>
-      <button class="zoom-btn" (click)="zoomIn()" [disabled]="zoomLevel() >= maxZoom" title="Zoom In">+</button>
+      <button
+        class="zoom-btn"
+        (click)="zoomIn()"
+        [disabled]="zoomLevel() >= maxZoom"
+        title="Zoom In"
+      >
+        +
+      </button>
       <button class="zoom-btn" (click)="resetZoom()" title="Reset Zoom">⟲</button>
     </div>
   </div>
@@ -394,7 +487,14 @@
           }}{{ rightPanelFor() === 'assembly' ? 'Assembly' : 'Sub Assembly' }}
         </h3>
         <button class="close-btn" (click)="closeRightPanel()">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
           </svg>
@@ -411,7 +511,9 @@
             type="text"
             [(ngModel)]="assemblyForm.assemblyName"
             (ngModelChange)="onNameChange($event)"
-            [placeholder]="rightPanelFor() === 'assembly' ? 'Enter Assembly Name' : 'Enter Sub Assembly Name'"
+            [placeholder]="
+              rightPanelFor() === 'assembly' ? 'Enter Assembly Name' : 'Enter Sub Assembly Name'
+            "
             class="form-input"
           />
         </div>
@@ -421,13 +523,18 @@
         </div>
         <div class="form-group">
           <label>Parent Class Code</label>
-          <input type="text" disabled [(ngModel)]="assemblyForm.parentClassCode" class="form-input" />
+          <input
+            type="text"
+            disabled
+            [(ngModel)]="assemblyForm.parentClassCode"
+            class="form-input"
+          />
         </div>
       </div>
 
       <div class="panel-footer">
         @if (formErrorMessage) {
-          <div style="color: brown; flex: 1;">{{ formErrorMessage }}</div>
+          <div style="color: brown; flex: 1">{{ formErrorMessage }}</div>
         }
         <button class="btn-cancel" (click)="closeRightPanel()">Cancel</button>
         <button class="btn-submit" (click)="submitForm()" [disabled]="!assemblyForm.isValid">
@@ -436,7 +543,6 @@
       </div>
     </div>
   }
-
 </div>
 
 <!-- Footer -->

@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npx tsc:*)",
-      "Bash(npx ng:*)"
+      "Bash(npx ng:*)",
+      "Bash(find '/d/Angular elemts/ang20/src/app' -type f \\\\\\(-name *.service.ts -o -name *.module.ts \\\\\\))",
+      "Bash(grep -r \"MatTree\\\\|mat-tree\" 'd:/Angular elemts/ang20/package.json' 'd:/Angular elemts/ang20/src' --include=*.ts -l)"
     ]
   }
 }

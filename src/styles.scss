@@ -61,3 +61,13 @@ app-root > mat-tab-group .mat-mdc-tab-body-content {
   height: 100%;
   overflow: hidden;
 }
+
+/* Edit Hotspots dialog — make the container fill the dialog dimensions */
+.edit-hotspots-dialog .mat-mdc-dialog-container,
+.edit-hotspots-dialog .mat-mdc-dialog-surface {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  overflow: hidden;
+}

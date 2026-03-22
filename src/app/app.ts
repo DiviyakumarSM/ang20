@@ -6,16 +6,21 @@ import { Drillerv1Component } from './test/v1';
 import { SetFolder } from './set-folder/set-folder';
 import { FinalSetup } from './final-setup/final-setup';
 import { MatTabsModule } from '@angular/material/tabs';
+import { HierarchyTreeComponent } from './hierarchy-tree/hierarchy-tree.component';
+import { mockResponse } from './final-setup/data';
+import { IAssemblyHierarchy } from './final-setup/data.model';
 
 @Component({
   selector: 'app-root',
-  imports: [AssemblyDrillerComponent, Drillerv1Component, SetFolder, FinalSetup, MatTabsModule],
+  imports: [AssemblyDrillerComponent, Drillerv1Component, SetFolder, FinalSetup, MatTabsModule, HierarchyTreeComponent],
   templateUrl: './app.html',
   styleUrl: './app.scss',
   schemas: [CUSTOM_ELEMENTS_SCHEMA],
 })
 export class App {
   protected readonly title = signal('ang20');
+  hierarchyData: IAssemblyHierarchy = mockResponse.data.assemblyHierarchy;
+  selectedNodeId: string | null = null;
   data = {
     rootIds: [
       'fa930973-0287-40d8-96e4-e849fc50caff',

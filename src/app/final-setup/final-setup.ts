@@ -1,30 +1,17 @@
-import {
-  Component,
-  signal,
-  viewChildren,
-  ElementRef,
-  effect,
-  OnInit,
-} from '@angular/core';
+import { Component, signal, viewChildren, ElementRef, effect, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import {
-  CdkDragDrop,
-  DragDropModule,
-  CdkDrag,
-  CdkDropList,
-} from '@angular/cdk/drag-drop';
+import { CdkDragDrop, DragDropModule, CdkDrag, CdkDropList } from '@angular/cdk/drag-drop';
+import { MatDialog } from '@angular/material/dialog';
 import { v4 as uuidv4 } from 'uuid';
 import * as Model from './data.model';
 import { mockResponse } from './data';
+import { EditHotspotsComponent } from '../edit-hotspots/edit-hotspots.component';
 
 /* ─── Local runtime types ─── */
 
 /** Union of all item types that can appear in a hierarchy column */
-type ColumnItem =
-  | Model.IHierarchyNodeRuntime
-  | Model.IImageListItem
-  | Model.ITableListItem;
+type ColumnItem = Model.IHierarchyNodeRuntime | Model.IImageListItem | Model.ITableListItem;
 
 /** Data attached to each CDK drop-list */
 interface IDropListData {
@@ -49,6 +36,7 @@ interface IConnection {
   styleUrl: './final-setup.scss',
 })
 export class FinalSetup implements OnInit {
+  private dialog = inject(MatDialog);
   rawFileData!: Model.IAssemblyHierarchy;
 
   availableImages = signal<Model.IImageListItem[]>([]);
@@ -231,9 +219,7 @@ export class FinalSetup implements OnInit {
       Object.keys(node.tableSlots ?? {}).forEach((id) => usedIds.add(id));
       node.pendingTables.forEach((t) => usedIds.add(t.tableId));
     });
-    this.availableTables.set(
-      this.rawFileData.tableList.filter((t) => !usedIds.has(t.tableId)),
-    );
+    this.availableTables.set(this.rawFileData.tableList.filter((t) => !usedIds.has(t.tableId)));
   }
 
   /* ================= TYPE GUARDS ================= */
@@ -423,13 +409,15 @@ export class FinalSetup implements OnInit {
       const label = `"${node.assemblyName || node.hierarchyId}"`;
 
       // Per-assembly checks: image with no table, or table with no image
-      const unpairedImages = node.assemblyList.filter(
-        (a) => !!a.extractedImgId && Object.keys(a.linkedPageProductTable ?? {}).length === 0,
-      ).length + node.pendingImages.length;
+      const unpairedImages =
+        node.assemblyList.filter(
+          (a) => !!a.extractedImgId && Object.keys(a.linkedPageProductTable ?? {}).length === 0,
+        ).length + node.pendingImages.length;
 
-      const unpairedTables = node.assemblyList.filter(
-        (a) => !a.extractedImgId && Object.keys(a.linkedPageProductTable ?? {}).length > 0,
-      ).length + node.pendingTables.length;
+      const unpairedTables =
+        node.assemblyList.filter(
+          (a) => !a.extractedImgId && Object.keys(a.linkedPageProductTable ?? {}).length > 0,
+        ).length + node.pendingTables.length;
 
       if (unpairedImages > 0) {
         errors.push(
@@ -464,9 +452,7 @@ export class FinalSetup implements OnInit {
         if (a.extractedImgId) this.parentMap.set(a.extractedImgId, node.hierarchyId);
         this.parentMap.set(a.tableListItemId ?? a.assemblyId, node.hierarchyId);
       });
-      node.pendingImages.forEach((img) =>
-        this.parentMap.set(img.extractedImgId, node.hierarchyId),
-      );
+      node.pendingImages.forEach((img) => this.parentMap.set(img.extractedImgId, node.hierarchyId));
       node.pendingTables.forEach((t) => this.parentMap.set(t.tableId, node.hierarchyId));
     });
   }
@@ -765,7 +751,11 @@ export class FinalSetup implements OnInit {
     assembly.imageNameAsInPDF = image.imageNameAsInPDF || image.drawingName;
     assembly.svgFileName = `${drawingName}.svg`;
     assembly.svgFileId = image.svgFileId ?? '';
-    assembly.svgHeader = this.replaceSvgDrawingName(image.svgHeader || '', image.drawingName, drawingName);
+    assembly.svgHeader = this.replaceSvgDrawingName(
+      image.svgHeader || '',
+      image.drawingName,
+      drawingName,
+    );
     assembly.hotspotDetails = image.hotspotDetails;
     assembly.imageUrl = image.imageUrl;
     assembly.originalImgId = '';
@@ -819,7 +809,11 @@ export class FinalSetup implements OnInit {
     const assemblies = node.assemblyList.filter((a) => a.extractedImgId === image.extractedImgId);
     if (!assemblies.length) return;
 
-    const restored = { ...this.imageFromAssembly(assemblies[0]), isPaired: undefined, selected: false };
+    const restored = {
+      ...this.imageFromAssembly(assemblies[0]),
+      isPaired: undefined,
+      selected: false,
+    };
     this.availableImages.update((list) => [...list, restored]);
     this.rawFileData.imageList = this.availableImages();
 
@@ -1009,7 +1003,11 @@ export class FinalSetup implements OnInit {
     const prespectiveName = this.generatePrespectiveName(node);
     const drawingName = prespectiveName ? `${productId}_${prespectiveName}` : productId;
     const svgFileName = `${drawingName}.svg`;
-    const svgHeader = this.replaceSvgDrawingName(image.svgHeader || '', image.drawingName, drawingName);
+    const svgHeader = this.replaceSvgDrawingName(
+      image.svgHeader || '',
+      image.drawingName,
+      drawingName,
+    );
     return {
       assemblyId: uuidv4(),
       tableListItemId: table.tableId,
@@ -1148,8 +1146,7 @@ export class FinalSetup implements OnInit {
         'CLASS_' + (value ?? '').trim().replace(/\s+/g, '_').toUpperCase();
     }
     const conflict =
-      this.rightPanelMode() === 'add' &&
-      this.classCodeList().includes(this.assemblyForm.classCode);
+      this.rightPanelMode() === 'add' && this.classCodeList().includes(this.assemblyForm.classCode);
     if (this.assemblyForm.assemblyName && !conflict) {
       this.assemblyForm.isValid = true;
       this.formErrorMessage = '';
@@ -1245,8 +1242,7 @@ export class FinalSetup implements OnInit {
     active.forEach((pid, i) => {
       const pEl = els.find(
         (e) =>
-          e.nativeElement.dataset['id'] === pid &&
-          e.nativeElement.dataset['level'] === String(i),
+          e.nativeElement.dataset['id'] === pid && e.nativeElement.dataset['level'] === String(i),
       )?.nativeElement as HTMLElement | undefined;
       const next = this.columns()[i + 1];
       if (!pEl || !next) return;
@@ -1310,15 +1306,11 @@ export class FinalSetup implements OnInit {
   /* ================= ZOOM ================= */
 
   zoomIn(): void {
-    this.zoomLevel.set(
-      Number(Math.min(this.zoomLevel() + this.zoomStep, this.maxZoom).toFixed(1)),
-    );
+    this.zoomLevel.set(Number(Math.min(this.zoomLevel() + this.zoomStep, this.maxZoom).toFixed(1)));
   }
 
   zoomOut(): void {
-    this.zoomLevel.set(
-      Number(Math.max(this.zoomLevel() - this.zoomStep, this.minZoom).toFixed(1)),
-    );
+    this.zoomLevel.set(Number(Math.max(this.zoomLevel() - this.zoomStep, this.minZoom).toFixed(1)));
   }
 
   resetZoom(): void {
@@ -1329,5 +1321,21 @@ export class FinalSetup implements OnInit {
 
   saveHierarchy(): void {
     console.log('[FinalSetup] SAVE — rawFileData:', JSON.parse(JSON.stringify(this.rawFileData)));
+  }
+
+  openHotspot(image: Model.IImageListItem, colIdx: number): void {
+    const parentId = this.selectedIds()[colIdx - 1];
+    if (!parentId) return;
+    const node = this.asNode(parentId);
+    const assembly = node?.assemblyList.find((a) => a.extractedImgId === image.extractedImgId);
+    if (!assembly) return;
+
+    EditHotspotsComponent.open(this.dialog, assembly)
+      .afterClosed()
+      .subscribe((result) => {
+        if (!result) return;
+        assembly.hotspotDetails = result.hotspotDetails;
+        this.emitChange(parentId, 'UPDATE_HOTSPOTS');
+      });
   }
 }
