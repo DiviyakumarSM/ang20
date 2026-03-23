@@ -127,11 +127,12 @@ export class FinalSetup implements OnInit {
     const classCodes = Object.values(this.rawFileData.nodes).map((n) => n.classCode);
     this.classCodeList.set([...new Set(classCodes)]);
     this.refreshView();
-    if (this.rawFileData.rootIds.length) {
-      this.selectItem(
-        this.rawFileData.nodes[this.rawFileData.rootIds[0]] as Model.IHierarchyNodeRuntime,
-        0,
-      );
+    const sortedRoots = this.rawFileData.rootIds
+      .map((id) => this.asNode(id))
+      .filter((n): n is Model.IHierarchyNodeRuntime => !!n)
+      .sort((a, b) => (a.assemblyName ?? a.hierarchyId).localeCompare(b.assemblyName ?? b.hierarchyId));
+    if (sortedRoots.length) {
+      this.selectItem(sortedRoots[0], 0);
     }
   }
 
