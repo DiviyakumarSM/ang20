@@ -338,7 +338,8 @@ export class FinalSetup implements OnInit {
     // Column 0: root nodes
     const rootNodes = this.rawFileData.rootIds
       .map((id) => this.asNode(id))
-      .filter((n): n is Model.IHierarchyNodeRuntime => !!n);
+      .filter((n): n is Model.IHierarchyNodeRuntime => !!n)
+      .sort((a, b) => (a.assemblyName ?? a.hierarchyId).localeCompare(b.assemblyName ?? b.hierarchyId));
     cols.push(rootNodes);
 
     // Subsequent columns from selected hierarchy
@@ -384,7 +385,12 @@ export class FinalSetup implements OnInit {
         }
       }
 
-      // Order: sub-assemblies → images → tables
+      // Order: sub-assemblies (sorted) → images → tables
+      nodeItems.sort((a, b) => {
+        const nameA = (a as Model.IHierarchyNodeRuntime).assemblyName ?? (a as Model.IHierarchyNodeRuntime).hierarchyId;
+        const nameB = (b as Model.IHierarchyNodeRuntime).assemblyName ?? (b as Model.IHierarchyNodeRuntime).hierarchyId;
+        return nameA.localeCompare(nameB);
+      });
       cols.push([...nodeItems, ...imageItems, ...tableItems]);
     });
 
@@ -462,10 +468,15 @@ export class FinalSetup implements OnInit {
     const sel = this.selectedIds().slice(0, colIdx);
     sel[colIdx] = item.hierarchyId;
 
-    // Auto-expand: follow the first child node at each subsequent level
+    // Auto-expand: follow the alphabetically first child node at each subsequent level
     let current = item as Model.IHierarchyNodeRuntime;
     while (current.childIds && current.childIds.length > 0) {
-      const firstChildId = current.childIds[0];
+      const sortedChildIds = [...current.childIds].sort((a, b) => {
+        const na = this.asNode(a);
+        const nb = this.asNode(b);
+        return (na?.assemblyName ?? a).localeCompare(nb?.assemblyName ?? b);
+      });
+      const firstChildId = sortedChildIds[0];
       const firstChild = this.asNode(firstChildId);
       if (!firstChild) break;
       sel.push(firstChildId);

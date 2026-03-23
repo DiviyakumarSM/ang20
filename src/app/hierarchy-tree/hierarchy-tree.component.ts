@@ -42,10 +42,10 @@ export class HierarchyTreeComponent implements OnChanges {
       return {
         hierarchyId: node.hierarchyId,
         assemblyName: node.assemblyName || node.hierarchyId,
-        children: (node.childIds ?? []).map(build),
+        children: (node.childIds ?? []).map(build).sort((a, b) => a.assemblyName.localeCompare(b.assemblyName)),
       };
     };
-    return this.hierarchy.rootIds.map(build);
+    return this.hierarchy.rootIds.map(build).sort((a, b) => a.assemblyName.localeCompare(b.assemblyName));
   }
 
   onNodeClick(node: TreeNode): void {
